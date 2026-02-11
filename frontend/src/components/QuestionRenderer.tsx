@@ -97,7 +97,8 @@ export function QuestionRenderer({
               )}
             </div>
           ))}
-          <div className="mt-3 pt-3 border-t border-[var(--border-light)]">
+          <div className="answer-space"></div>
+          <div className="answer-display mt-3 pt-3 border-t border-[var(--border-light)]">
             {isEditing ? (
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium text-[var(--text-muted)]">Answer:</span>
@@ -109,7 +110,9 @@ export function QuestionRenderer({
                 />
               </div>
             ) : (
-              <span className="text-xs font-medium text-[var(--primary)]">Answer: {question.answer}</span>
+              <div>
+                <span className="font-bold text-sm">Answer:</span> <span className="text-sm">{question.answer}</span>
+              </div>
             )}
           </div>
         </div>
@@ -128,7 +131,8 @@ export function QuestionRenderer({
       ) : (
         <p className="text-sm text-[var(--text-primary)] mb-3">{question.statement}</p>
       )}
-      <div className="mt-3 pt-3 border-t border-[var(--border-light)]">
+      <div className="answer-space"></div>
+      <div className="answer-display mt-3 pt-3 border-t border-[var(--border-light)]">
         {isEditing ? (
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-[var(--text-muted)]">Answer:</span>
@@ -142,9 +146,9 @@ export function QuestionRenderer({
             </select>
           </div>
         ) : (
-          <span className="text-xs font-medium text-[var(--primary)]">
-            Answer: {question.answer ? 'True' : 'False'}
-          </span>
+          <div>
+            <span className="font-bold text-sm">Answer:</span> <span className="text-sm">{question.answer ? 'True' : 'False'}</span>
+          </div>
         )}
       </div>
     </>
@@ -161,7 +165,8 @@ export function QuestionRenderer({
       ) : (
         <p className="text-sm text-[var(--text-primary)] mb-3">{question.question}</p>
       )}
-      <div className="mt-3 pt-3 border-t border-[var(--border-light)]">
+      <div className="answer-space"></div>
+      <div className="answer-display mt-3 pt-3 border-t border-[var(--border-light)]">
         {isEditing ? (
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-[var(--text-muted)]">Answer:</span>
@@ -173,7 +178,9 @@ export function QuestionRenderer({
             />
           </div>
         ) : (
-          <span className="text-xs font-medium text-[var(--primary)]">Answer: {question.answer}</span>
+          <div>
+            <span className="font-bold text-sm">Answer:</span> <span className="text-sm">{question.answer}</span>
+          </div>
         )}
       </div>
     </>
@@ -206,12 +213,15 @@ export function QuestionRenderer({
           </div>
         </div>
       </div>
+      <div className="answer-space"></div>
       {question.answer && (
-        <div className="mt-3 pt-3 border-t border-[var(--border-light)]">
-          <p className="text-xs font-medium text-[var(--primary)] mb-2">Answer Key:</p>
+        <div className="answer-display mt-3 pt-3 border-t border-[var(--border-light)]">
+          <div className="mb-2">
+            <span className="font-bold text-sm">Answer:</span>
+          </div>
           <div className="space-y-1">
             {Object.entries(question.answer).map(([key, value]: [string, any], idx: number) => (
-              <div key={idx} className="text-xs text-[var(--text-secondary)]">
+              <div key={idx} className="text-sm text-[var(--text-secondary)]">
                 {key} → {value}
               </div>
             ))}
@@ -234,12 +244,15 @@ export function QuestionRenderer({
           </div>
         ))}
       </div>
+      <div className="answer-space"></div>
       {question.answer && Array.isArray(question.answer) && (
-        <div className="mt-3 pt-3 border-t border-[var(--border-light)]">
-          <p className="text-xs font-medium text-[var(--primary)] mb-2">Correct Order:</p>
+        <div className="answer-display mt-3 pt-3 border-t border-[var(--border-light)]">
+          <div className="mb-2">
+            <span className="font-bold text-sm">Answer:</span>
+          </div>
           <div className="space-y-1">
             {question.answer.map((sentence: string, idx: number) => (
-              <div key={idx} className="text-xs text-[var(--text-secondary)]">
+              <div key={idx} className="text-sm text-[var(--text-secondary)]">
                 {idx + 1}. {sentence}
               </div>
             ))}
@@ -272,11 +285,12 @@ export function QuestionRenderer({
                 ))}
               </div>
             )}
+            <div className="answer-space"></div>
             {subQ.answer && (
-              <div className="mt-2">
-                <span className="text-xs font-medium text-[var(--primary)]">
-                  Answer: {typeof subQ.answer === 'boolean' ? (subQ.answer ? 'True' : 'False') : subQ.answer}
-                </span>
+              <div className="answer-display mt-2">
+                <div>
+                  <span className="font-bold text-sm">Answer:</span> <span className="text-sm">{typeof subQ.answer === 'boolean' ? (subQ.answer ? 'True' : 'False') : subQ.answer}</span>
+                </div>
               </div>
             )}
           </div>
@@ -296,12 +310,13 @@ export function QuestionRenderer({
       ) : (
         <p className="text-sm text-[var(--text-primary)] mb-3">{question.question}</p>
       )}
-      <div className="bg-[var(--background-light)] border border-[var(--border)] rounded-lg p-3 min-h-[60px]">
-        <span className="text-xs text-[var(--text-muted)]">Answer space provided for student</span>
+      <div className="answer-space bg-[var(--background-light)] border border-[var(--border)] rounded-lg p-3 min-h-[60px]">
       </div>
       {question.answer && (
-        <div className="mt-3 pt-3 border-t border-[var(--border-light)]">
-          <p className="text-xs font-medium text-[var(--primary)] mb-2">Sample Answer:</p>
+        <div className="answer-display mt-3 pt-3 border-t border-[var(--border-light)]">
+          <div className="mb-2">
+            <span className="font-bold text-sm">Sample Answer:</span>
+          </div>
           <div className="p-3 bg-[var(--background-light)] rounded-lg">
             <p className="text-sm text-[var(--text-primary)] leading-relaxed">{question.answer}</p>
           </div>
@@ -321,6 +336,7 @@ export function QuestionRenderer({
           const isObject = typeof sent === 'object' && sent !== null
           const sentenceText = isObject ? sent.incomplete : sent
           const sentenceMarks = isObject && sent.marks ? sent.marks : null
+          const sentenceAnswer = isObject && sent.answer ? sent.answer : null
 
           return (
             <div key={idx} className="pl-4 border-l-2 border-[var(--border)]">
@@ -328,9 +344,15 @@ export function QuestionRenderer({
                 {idx + 1}. {sentenceMarks && `(${sentenceMarks} marks)`}
               </p>
               <p className="text-sm text-[var(--text-primary)] mb-2">{sentenceText}</p>
-              <div className="bg-[var(--background-light)] rounded p-2">
-                <span className="text-xs text-[var(--text-muted)]">Answer space</span>
+              <div className="answer-space bg-[var(--background-light)] rounded p-2">
               </div>
+              {sentenceAnswer && (
+                <div className="answer-display mt-2 pt-2 border-t border-[var(--border-light)]">
+                  <div>
+                    <span className="font-bold text-sm">Sample Answer:</span> <span className="text-sm">{sentenceAnswer}</span>
+                  </div>
+                </div>
+              )}
             </div>
           )
         })}
@@ -348,13 +370,20 @@ export function QuestionRenderer({
           // Handle both formats: string or object with word/answer
           const isObject = typeof wordItem === 'object' && wordItem !== null
           const wordText = isObject ? wordItem.word : wordItem
+          const wordAnswer = isObject && wordItem.answer ? wordItem.answer : null
 
           return (
             <div key={idx} className="pl-4 border-l-2 border-[var(--border)]">
               <p className="text-sm font-medium text-[var(--text-primary)] mb-2">{idx + 1}. {wordText}</p>
-              <div className="bg-[var(--background-light)] rounded p-2">
-                <span className="text-xs text-[var(--text-muted)]">Sentence space</span>
+              <div className="answer-space bg-[var(--background-light)] rounded p-2">
               </div>
+              {wordAnswer && (
+                <div className="answer-display mt-2 pt-2 border-t border-[var(--border-light)]">
+                  <div>
+                    <span className="font-bold text-sm">Sample Answer:</span> <span className="text-sm">{wordAnswer}</span>
+                  </div>
+                </div>
+              )}
             </div>
           )
         })}
@@ -372,12 +401,13 @@ export function QuestionRenderer({
           <p className="text-sm font-medium text-[var(--text-primary)]">{question.prompt}</p>
         </div>
       )}
-      <div className="bg-[var(--background-light)] border border-[var(--border)] rounded-lg p-3 min-h-[80px]">
-        <span className="text-xs text-[var(--text-muted)]">Writing space provided for student</span>
+      <div className="answer-space bg-[var(--background-light)] border border-[var(--border)] rounded-lg p-3 min-h-[80px]">
       </div>
       {question.answer && (
-        <div className="mt-3 pt-3 border-t border-[var(--border-light)]">
-          <p className="text-xs font-medium text-[var(--primary)] mb-2">Sample Answer:</p>
+        <div className="answer-display mt-3 pt-3 border-t border-[var(--border-light)]">
+          <div className="mb-2">
+            <span className="font-bold text-sm">Sample Answer:</span>
+          </div>
           <div className="p-3 bg-[var(--background-light)] rounded-lg">
             <p className="text-sm text-[var(--text-primary)] leading-relaxed">{question.answer}</p>
           </div>
@@ -397,12 +427,13 @@ export function QuestionRenderer({
           <p className="text-sm text-[var(--text-primary)] italic">{question.image_description}</p>
         </div>
       )}
-      <div className="bg-[var(--background-light)] border border-[var(--border)] rounded-lg p-3 min-h-[60px]">
-        <span className="text-xs text-[var(--text-muted)]">Description space provided for student</span>
+      <div className="answer-space bg-[var(--background-light)] border border-[var(--border)] rounded-lg p-3 min-h-[60px]">
       </div>
       {question.answer && (
-        <div className="mt-3 pt-3 border-t border-[var(--border-light)]">
-          <p className="text-xs font-medium text-[var(--primary)] mb-2">Sample Answer:</p>
+        <div className="answer-display mt-3 pt-3 border-t border-[var(--border-light)]">
+          <div className="mb-2">
+            <span className="font-bold text-sm">Sample Answer:</span>
+          </div>
           <div className="p-3 bg-[var(--background-light)] rounded-lg">
             <p className="text-sm text-[var(--text-primary)] leading-relaxed">{question.answer}</p>
           </div>
@@ -424,12 +455,14 @@ export function QuestionRenderer({
           <div key={idx} className="pl-4 border-l-2 border-[var(--border)]">
             <p className="text-xs font-medium text-[var(--text-muted)] mb-1">{idx + 1}. ({subQ.marks} marks)</p>
             <p className="text-sm text-[var(--text-primary)] mb-2">{subQ.question}</p>
-            <div className="bg-[var(--background-light)] rounded p-2 min-h-[40px]">
+            <div className="answer-space bg-[var(--background-light)] rounded p-2 min-h-[40px]">
               <span className="text-xs text-[var(--text-muted)]">Answer space</span>
             </div>
             {subQ.answer && (
-              <div className="mt-2 p-2 bg-[var(--background-light)] rounded border-l-2 border-[var(--primary)]">
-                <p className="text-xs font-medium text-[var(--primary)] mb-1">Sample Answer:</p>
+              <div className="answer-display mt-2 pt-2 border-t border-[var(--border-light)]">
+                <div className="mb-1">
+                  <span className="font-bold text-sm">Sample Answer:</span>
+                </div>
                 <p className="text-sm text-[var(--text-primary)]">{subQ.answer}</p>
               </div>
             )}
@@ -440,16 +473,16 @@ export function QuestionRenderer({
   )
 
   return (
-    <div className="border-b border-[var(--border-light)] last:border-0 pb-4 last:pb-0 mb-4 last:mb-0">
-      <div className="flex items-start gap-3">
+    <div className={`question-container border-b border-[var(--border-light)] last:border-0 pb-4 last:pb-0 mb-4 last:mb-0 ${!isSelected ? 'not-selected' : ''}`}>
+      <div className="flex items-start gap-3 print:block">
         <input
           type="checkbox"
           checked={isSelected}
           onChange={onToggleSelection}
-          className="mt-1 w-4 h-4 accent-[var(--primary)]"
+          className="no-print mt-1 w-4 h-4 accent-[var(--primary)]"
         />
         <div className="flex-1">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-2 print:mb-3">
             <span className="text-sm font-semibold text-[var(--text-primary)]">Question {index + 1}</span>
             <div className="flex items-center gap-2">
               {isEditing ? (
@@ -461,12 +494,12 @@ export function QuestionRenderer({
                   min="1"
                 />
               ) : (
-                <span className="text-xs text-[var(--text-muted)]">{question.marks} marks</span>
+                <span className="text-xs text-[var(--text-muted)] print:text-[var(--text-primary)]">{question.marks} marks</span>
               )}
               {!isEditing && (
                 <button
                   onClick={onStartEditing}
-                  className="p-1 hover:bg-[var(--background-light)] rounded transition-colors"
+                  className="no-print p-1 hover:bg-[var(--background-light)] rounded transition-colors"
                   title="Edit question"
                 >
                   <Edit2 size={14} className="text-[var(--text-muted)]" />
@@ -478,7 +511,7 @@ export function QuestionRenderer({
           {renderQuestionContent()}
 
           {isEditing && (
-            <div className="flex gap-2 mt-3">
+            <div className="no-print flex gap-2 mt-3">
               <button
                 onClick={onSaveEditing}
                 className="px-3 py-1.5 bg-[var(--primary)] text-white rounded-lg text-xs font-medium hover:bg-[var(--primary-dark)] transition-colors flex items-center gap-1"
