@@ -168,6 +168,10 @@ export default function ExamGenerator() {
     setSelectedQuestions(allIds)
   }
 
+  const unselectAllQuestions = () => {
+    setSelectedQuestions(new Set())
+  }
+
   const getTotalMarks = () => {
     if (!examResult?.exam) return 0
     let total = 0
@@ -272,7 +276,7 @@ export default function ExamGenerator() {
     )
   }
 
-  const renderQuestionsSection = () => {
+  const renderQuestionsSection = (filterBySelection = false) => {
     if (!examResult?.exam) return null
 
     return (
@@ -285,11 +289,13 @@ export default function ExamGenerator() {
               const questionArray = Array.isArray(questions) ? questions : []
               if (questionArray.length === 0) return null
 
-              // Filter only selected questions
-              const filteredQuestions = questionArray.filter((_, idx) =>
-                selectedQuestions.has(`obj-${typeId}-${idx}`)
-              )
-              if (filteredQuestions.length === 0) return null
+              // Filter only selected questions if filterBySelection is true (for print)
+              if (filterBySelection) {
+                const filteredQuestions = questionArray.filter((_, idx) =>
+                  selectedQuestions.has(`obj-${typeId}-${idx}`)
+                )
+                if (filteredQuestions.length === 0) return null
+              }
 
               return (
                 <div key={typeId} className="category-section bg-white rounded-lg border border-[var(--border)] overflow-hidden">
@@ -298,7 +304,8 @@ export default function ExamGenerator() {
                   </div>
                   <div className="p-4">
                     {questionArray.map((question: any, idx: number) => {
-                      if (!selectedQuestions.has(`obj-${typeId}-${idx}`)) return null
+                      const questionId = `obj-${typeId}-${idx}`
+                      if (filterBySelection && !selectedQuestions.has(questionId)) return null
                       return renderQuestion(question, idx, typeId, 'objective')
                     })}
                   </div>
@@ -316,11 +323,13 @@ export default function ExamGenerator() {
               const questionArray = Array.isArray(questions) ? questions : []
               if (questionArray.length === 0) return null
 
-              // Filter only selected questions
-              const filteredQuestions = questionArray.filter((_, idx) =>
-                selectedQuestions.has(`subj-${typeId}-${idx}`)
-              )
-              if (filteredQuestions.length === 0) return null
+              // Filter only selected questions if filterBySelection is true (for print)
+              if (filterBySelection) {
+                const filteredQuestions = questionArray.filter((_, idx) =>
+                  selectedQuestions.has(`subj-${typeId}-${idx}`)
+                )
+                if (filteredQuestions.length === 0) return null
+              }
 
               return (
                 <div key={typeId} className="category-section bg-white rounded-lg border border-[var(--border)] overflow-hidden">
@@ -329,7 +338,8 @@ export default function ExamGenerator() {
                   </div>
                   <div className="p-4">
                     {questionArray.map((question: any, idx: number) => {
-                      if (!selectedQuestions.has(`subj-${typeId}-${idx}`)) return null
+                      const questionId = `subj-${typeId}-${idx}`
+                      if (filterBySelection && !selectedQuestions.has(questionId)) return null
                       return renderQuestion(question, idx, typeId, 'subjective')
                     })}
                   </div>
@@ -579,65 +589,69 @@ export default function ExamGenerator() {
                 </div>
               </div>
 
-              <div className="exam-print-area">
-                {/* PROFESSIONAL EXAM HEADER - Print Only */}
-                <div className="print-only hidden">
-                  <div className="mb-6 font-primary text-black">
-                    {/* School Title */}
-                    <div className="text-center font-bold text-xl mb-4 uppercase tracking-wide">
-                      Army Public School (APS)
-                    </div>
+              {/* SCREEN VIEW - Show all questions */}
+              <div className="screen-only">
+                {renderQuestionsSection(false)}
+              </div>
 
-                    {/* Subject and Total Marks Row */}
-                    <div className="flex justify-between items-end mb-3 font-bold text-base">
-                      <div className="flex items-center gap-3">
-                        <span className="uppercase">Subject:</span>
-                        <span className="font-normal border-b border-black px-2">{formData.subject}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span>Total Marks:</span>
-                        <span>{getTotalMarks()}</span>
-                      </div>
-                    </div>
+              {/* PRINT VIEW - Show only selected questions */}
+              <div className="exam-print-area print-only hidden">
+                {/* PROFESSIONAL EXAM HEADER */}
+                <div className="mb-6 font-primary text-black">
+                  {/* School Title */}
+                  <div className="text-center font-bold text-xl mb-4 uppercase tracking-wide">
+                    Army Public School (APS)
+                  </div>
 
-                    {/* Student Info Grid */}
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-3 mb-4 text-sm font-semibold">
-                      <div className="flex items-center py-1">
-                        <span className="w-20 uppercase">Class:</span>
-                        <span className="border-b border-black flex-1 pl-2">{formData.grade}</span>
-                      </div>
-                      <div className="flex items-center py-1">
-                        <span className="w-20 uppercase">Date:</span>
-                        <span className="border-b border-black flex-1 pl-2">&nbsp;</span>
-                      </div>
-                      <div className="flex items-center py-1 col-span-2">
-                        <span className="w-20 uppercase">Name:</span>
-                        <span className="border-b border-black flex-1 pl-2">&nbsp;</span>
-                      </div>
-                      <div className="flex items-center py-1">
-                        <span className="w-20 uppercase">Roll No:</span>
-                        <span className="border-b border-black flex-1 pl-2">&nbsp;</span>
-                      </div>
-                      <div className="flex items-center py-1">
-                        <span className="w-20 uppercase">Section:</span>
-                        <span className="border-b border-black flex-1 pl-2">&nbsp;</span>
-                      </div>
+                  {/* Subject and Total Marks Row */}
+                  <div className="flex justify-between items-end mb-3 font-bold text-base">
+                    <div className="flex items-center gap-3">
+                      <span className="uppercase">Subject:</span>
+                      <span className="font-normal border-b border-black px-2">{formData.subject}</span>
                     </div>
+                    <div className="flex items-center gap-2">
+                      <span>Total Marks:</span>
+                      <span>{getTotalMarks()}</span>
+                    </div>
+                  </div>
 
-                    {/* Instructions */}
-                    <div className="py-2 border-y-2 border-black font-bold text-center italic mb-6 text-sm">
-                      Note: Read questions carefully, don't overwrite and check your work.
+                  {/* Student Info Grid */}
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-3 mb-4 text-sm font-semibold">
+                    <div className="flex items-center py-1">
+                      <span className="w-20 uppercase">Class:</span>
+                      <span className="border-b border-black flex-1 pl-2">{formData.grade}</span>
                     </div>
+                    <div className="flex items-center py-1">
+                      <span className="w-20 uppercase">Date:</span>
+                      <span className="border-b border-black flex-1 pl-2">&nbsp;</span>
+                    </div>
+                    <div className="flex items-center py-1 col-span-2">
+                      <span className="w-20 uppercase">Name:</span>
+                      <span className="border-b border-black flex-1 pl-2">&nbsp;</span>
+                    </div>
+                    <div className="flex items-center py-1">
+                      <span className="w-20 uppercase">Roll No:</span>
+                      <span className="border-b border-black flex-1 pl-2">&nbsp;</span>
+                    </div>
+                    <div className="flex items-center py-1">
+                      <span className="w-20 uppercase">Section:</span>
+                      <span className="border-b border-black flex-1 pl-2">&nbsp;</span>
+                    </div>
+                  </div>
+
+                  {/* Instructions */}
+                  <div className="py-2 border-y-2 border-black font-bold text-center italic mb-6 text-sm">
+                    Note: Read questions carefully, don't overwrite and check your work.
                   </div>
                 </div>
 
                 {/* EXAM PAPER SECTION */}
                 <div className="exam-paper-section">
-                  {renderQuestionsSection()}
+                  {renderQuestionsSection(true)}
                 </div>
 
                 {/* ANSWER KEY SECTION - Starts on new page */}
-                <div className="answer-key-section print-only hidden">
+                <div className="answer-key-section">
                   <div className="text-center font-bold text-xl mb-4 underline uppercase tracking-wide">
                     ANSWER KEY / RUBRIC
                   </div>
@@ -648,7 +662,7 @@ export default function ExamGenerator() {
                     <span className="font-bold mx-3">|</span>
                     <span className="font-bold mr-2">Date Generated:</span> {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
                   </div>
-                  {renderQuestionsSection()}
+                  {renderQuestionsSection(true)}
                 </div>
               </div>
               {/* Selection Toolbar */}
@@ -669,6 +683,12 @@ export default function ExamGenerator() {
                     className="px-4 py-2 bg-[var(--background-light)] hover:bg-[var(--border-light)] rounded-lg text-sm font-medium transition-colors"
                   >
                     Select All
+                  </button>
+                  <button
+                    onClick={unselectAllQuestions}
+                    className="px-4 py-2 bg-[var(--background-light)] hover:bg-[var(--border-light)] rounded-lg text-sm font-medium transition-colors"
+                  >
+                    Unselect All
                   </button>
                   <button
                     onClick={downloadExam}
