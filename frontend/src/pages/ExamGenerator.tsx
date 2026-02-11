@@ -150,19 +150,18 @@ export default function ExamGenerator() {
   const selectAllQuestions = () => {
     if (!examResult?.exam) return
     const allIds = new Set<string>()
-    let counter = 0
 
     Object.entries(examResult.exam.objective || {}).forEach(([type, questions]) => {
       const questionArray = Array.isArray(questions) ? questions : []
-      questionArray.forEach(() => {
-        allIds.add(`obj-${type}-${counter++}`)
+      questionArray.forEach((_, index) => {
+        allIds.add(`obj-${type}-${index}`)
       })
     })
 
     Object.entries(examResult.exam.subjective || {}).forEach(([type, questions]) => {
       const questionArray = Array.isArray(questions) ? questions : []
-      questionArray.forEach(() => {
-        allIds.add(`subj-${type}-${counter++}`)
+      questionArray.forEach((_, index) => {
+        allIds.add(`subj-${type}-${index}`)
       })
     })
 
@@ -273,10 +272,80 @@ export default function ExamGenerator() {
     )
   }
 
+  const renderQuestionsSection = () => {
+    if (!examResult?.exam) return null
+
+    return (
+      <div className="max-h-[600px] overflow-auto space-y-6 print:max-h-none print:overflow-visible">
+        {/* Objective Questions */}
+        {examResult.exam.objective && Object.keys(examResult.exam.objective).length > 0 && (
+          <div className="space-y-4">
+            {Object.entries(examResult.exam.objective).map(([typeId, questions]) => {
+              // Ensure questions is an array
+              const questionArray = Array.isArray(questions) ? questions : []
+              if (questionArray.length === 0) return null
+
+              // Filter only selected questions
+              const filteredQuestions = questionArray.filter((_, idx) =>
+                selectedQuestions.has(`obj-${typeId}-${idx}`)
+              )
+              if (filteredQuestions.length === 0) return null
+
+              return (
+                <div key={typeId} className="category-section bg-white rounded-lg border border-[var(--border)] overflow-hidden">
+                  <div className="h-9 px-4 bg-[var(--primary)] text-white text-sm font-bold flex items-center">
+                    {getQuestionTypeLabel(typeId)}
+                  </div>
+                  <div className="p-4">
+                    {questionArray.map((question: any, idx: number) => {
+                      if (!selectedQuestions.has(`obj-${typeId}-${idx}`)) return null
+                      return renderQuestion(question, idx, typeId, 'objective')
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Subjective Questions */}
+        {examResult.exam.subjective && Object.keys(examResult.exam.subjective).length > 0 && (
+          <div className="space-y-4">
+            {Object.entries(examResult.exam.subjective).map(([typeId, questions]) => {
+              // Ensure questions is an array
+              const questionArray = Array.isArray(questions) ? questions : []
+              if (questionArray.length === 0) return null
+
+              // Filter only selected questions
+              const filteredQuestions = questionArray.filter((_, idx) =>
+                selectedQuestions.has(`subj-${typeId}-${idx}`)
+              )
+              if (filteredQuestions.length === 0) return null
+
+              return (
+                <div key={typeId} className="category-section bg-white rounded-lg border border-[var(--border)] overflow-hidden">
+                  <div className="h-9 px-4 bg-[var(--primary-light)] text-white text-sm font-bold flex items-center">
+                    {getQuestionTypeLabel(typeId)}
+                  </div>
+                  <div className="p-4">
+                    {questionArray.map((question: any, idx: number) => {
+                      if (!selectedQuestions.has(`subj-${typeId}-${idx}`)) return null
+                      return renderQuestion(question, idx, typeId, 'subjective')
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-[var(--background)] flex flex-col">
       {/* Header */}
-      <header className="bg-[var(--primary)] text-white h-18 px-12 flex items-center justify-between">
+      <header className="no-print bg-[var(--primary)] text-white h-18 px-12 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <FileCheck size={28} />
           <span className="text-xl font-semibold">Exam Generator</span>
@@ -298,7 +367,7 @@ export default function ExamGenerator() {
       {/* Main Content */}
       <main className="flex-1 p-12 flex gap-8">
         {/* Form Panel */}
-        <div className="w-[420px] bg-[var(--surface)] rounded-2xl shadow-lg p-8 space-y-6 h-fit">
+        <div className="no-print w-[420px] bg-[var(--surface)] rounded-2xl shadow-lg p-8 space-y-6 h-fit">
           <div>
             <h2 className="text-2xl font-semibold text-[var(--text-primary)] mb-2">
               Generate Your Exam
@@ -444,11 +513,11 @@ export default function ExamGenerator() {
 
         {/* Output Panel */}
         <div className="flex-1 bg-[var(--surface)] rounded-2xl shadow-lg p-8 space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="no-print flex items-center justify-between">
             <h2 className="text-2xl font-semibold text-[var(--text-primary)]">Generated Exam</h2>
           </div>
 
-          <div className="h-px bg-[var(--border-light)]" />
+          <div className="no-print h-px bg-[var(--border-light)]" />
 
           {loading && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -484,8 +553,8 @@ export default function ExamGenerator() {
 
           {examResult?.exam && (
             <div className="space-y-6">
-              {/* Exam Meta */}
-              <div className="flex gap-6 text-sm">
+              {/* Screen-only Metadata Display */}
+              <div className="screen-only flex gap-6 text-sm mb-6">
                 <div className="flex items-center gap-2">
                   <GraduationCap size={16} className="text-[var(--text-muted)]" />
                   <span className="text-[var(--text-muted)]">Grade:</span>
@@ -510,59 +579,80 @@ export default function ExamGenerator() {
                 </div>
               </div>
 
-              {/* Exam Content */}
-              <div className="max-h-[600px] overflow-auto space-y-6">
-                {/* Objective Questions */}
-                {examResult.exam.objective && Object.keys(examResult.exam.objective).length > 0 && (
-                  <div className="space-y-4">
-                    {Object.entries(examResult.exam.objective).map(([typeId, questions]) => {
-                      // Ensure questions is an array
-                      const questionArray = Array.isArray(questions) ? questions : []
-                      if (questionArray.length === 0) return null
+              <div className="exam-print-area">
+                {/* PROFESSIONAL EXAM HEADER - Print Only */}
+                <div className="print-only hidden">
+                  <div className="mb-6 font-primary text-black">
+                    {/* School Title */}
+                    <div className="text-center font-bold text-xl mb-4 uppercase tracking-wide">
+                      Army Public School (APS)
+                    </div>
 
-                      return (
-                        <div key={typeId} className="bg-white rounded-lg border border-[var(--border)] overflow-hidden">
-                          <div className="h-9 px-4 bg-[var(--primary)] text-white text-sm font-semibold flex items-center">
-                            {getQuestionTypeLabel(typeId)}
-                          </div>
-                          <div className="p-4">
-                            {questionArray.map((question: any, idx: number) =>
-                              renderQuestion(question, idx, typeId, 'objective')
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
+                    {/* Subject and Total Marks Row */}
+                    <div className="flex justify-between items-end mb-3 font-bold text-base">
+                      <div className="flex items-center gap-3">
+                        <span className="uppercase">Subject:</span>
+                        <span className="font-normal border-b border-black px-2">{formData.subject}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span>Total Marks:</span>
+                        <span>{getTotalMarks()}</span>
+                      </div>
+                    </div>
+
+                    {/* Student Info Grid */}
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-3 mb-4 text-sm font-semibold">
+                      <div className="flex items-center py-1">
+                        <span className="w-20 uppercase">Class:</span>
+                        <span className="border-b border-black flex-1 pl-2">{formData.grade}</span>
+                      </div>
+                      <div className="flex items-center py-1">
+                        <span className="w-20 uppercase">Date:</span>
+                        <span className="border-b border-black flex-1 pl-2">&nbsp;</span>
+                      </div>
+                      <div className="flex items-center py-1 col-span-2">
+                        <span className="w-20 uppercase">Name:</span>
+                        <span className="border-b border-black flex-1 pl-2">&nbsp;</span>
+                      </div>
+                      <div className="flex items-center py-1">
+                        <span className="w-20 uppercase">Roll No:</span>
+                        <span className="border-b border-black flex-1 pl-2">&nbsp;</span>
+                      </div>
+                      <div className="flex items-center py-1">
+                        <span className="w-20 uppercase">Section:</span>
+                        <span className="border-b border-black flex-1 pl-2">&nbsp;</span>
+                      </div>
+                    </div>
+
+                    {/* Instructions */}
+                    <div className="py-2 border-y-2 border-black font-bold text-center italic mb-6 text-sm">
+                      Note: Read questions carefully, don't overwrite and check your work.
+                    </div>
                   </div>
-                )}
+                </div>
 
-                {/* Subjective Questions */}
-                {examResult.exam.subjective && Object.keys(examResult.exam.subjective).length > 0 && (
-                  <div className="space-y-4">
-                    {Object.entries(examResult.exam.subjective).map(([typeId, questions]) => {
-                      // Ensure questions is an array
-                      const questionArray = Array.isArray(questions) ? questions : []
-                      if (questionArray.length === 0) return null
+                {/* EXAM PAPER SECTION */}
+                <div className="exam-paper-section">
+                  {renderQuestionsSection()}
+                </div>
 
-                      return (
-                        <div key={typeId} className="bg-white rounded-lg border border-[var(--border)] overflow-hidden">
-                          <div className="h-9 px-4 bg-[var(--primary-light)] text-white text-sm font-semibold flex items-center">
-                            {getQuestionTypeLabel(typeId)}
-                          </div>
-                          <div className="p-4">
-                            {questionArray.map((question: any, idx: number) =>
-                              renderQuestion(question, idx, typeId, 'subjective')
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
+                {/* ANSWER KEY SECTION - Starts on new page */}
+                <div className="answer-key-section print-only hidden">
+                  <div className="text-center font-bold text-xl mb-4 underline uppercase tracking-wide">
+                    ANSWER KEY / RUBRIC
                   </div>
-                )}
+                  <div className="mb-6 border-b-2 border-dashed border-gray-400 pb-3 text-sm">
+                    <span className="font-bold mr-2">Subject:</span> {formData.subject}
+                    <span className="font-bold mx-3">|</span>
+                    <span className="font-bold mr-2">Grade:</span> {formData.grade}
+                    <span className="font-bold mx-3">|</span>
+                    <span className="font-bold mr-2">Date Generated:</span> {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                  </div>
+                  {renderQuestionsSection()}
+                </div>
               </div>
-
               {/* Selection Toolbar */}
-              <div className="sticky bottom-0 bg-[var(--surface)] border-t border-[var(--border)] pt-4 flex items-center justify-between">
+              <div className="no-print sticky bottom-0 bg-[var(--surface)] border-t border-[var(--border)] pt-4 flex items-center justify-between">
                 <div className="text-sm text-[var(--text-secondary)]">
                   <span className="font-semibold text-[var(--text-primary)]">{selectedQuestions.size}</span> of{' '}
                   <span className="font-semibold text-[var(--text-primary)]">
