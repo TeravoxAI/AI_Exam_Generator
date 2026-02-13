@@ -67,8 +67,8 @@ class LLMService:
                 question_types=question_types,
                 total_marks=total_marks
             )
-            system_prompt = get_system_prompt()
-            logger.debug(f"✅ Pedagogical prompts prepared")
+            system_prompt = get_system_prompt(subject=subject)
+            logger.debug(f"✅ Pedagogical prompts prepared ({subject} subject)")
 
             # Prepare request
             logger.debug("🔐 Preparing API request...")
@@ -80,7 +80,7 @@ class LLMService:
             payload = {
                 "model": self.model,
                 "temperature": 0.7,
-                "max_tokens": 16000,  # Increased for comprehensive exam responses
+                "max_tokens": 25000,  # Increased for comprehensive exam responses with all question types
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -88,7 +88,7 @@ class LLMService:
             }
             logger.info(f"🚀 Calling OpenRouter API with model: {self.model}")
             logger.info(f"   Endpoint: {self.api_base}/chat/completions")
-            logger.info(f"   Temperature: 0.7 | Max tokens: 16000")
+            logger.info(f"   Temperature: 0.7 | Max tokens: 25000")
             logger.debug(f"   System prompt length: {len(system_prompt)} chars")
             logger.debug(f"   User prompt length: {len(user_prompt)} chars")
 
