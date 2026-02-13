@@ -11,15 +11,9 @@ from pathlib import Path
 LOGS_DIR = Path(__file__).parent.parent.parent / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
 
-<<<<<<< HEAD
-# Log file paths
-LOG_FILE = LOGS_DIR / f"teravox_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-ERROR_LOG_FILE = LOGS_DIR / f"teravox_errors_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-=======
 # Log file paths (date-based, not timestamp-based)
 LOG_FILE = LOGS_DIR / f"teravox_{datetime.now().strftime('%Y%m%d')}.log"
 ERROR_LOG_FILE = LOGS_DIR / f"teravox_errors_{datetime.now().strftime('%Y%m%d')}.log"
->>>>>>> feat/maths
 
 
 def get_logger(name: str) -> logging.Logger:
