@@ -1,5 +1,6 @@
 """
 Logging configuration for Teravox
+Supports both local development and Vercel deployment
 """
 
 import logging
@@ -7,18 +8,26 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-# Create logs directory if it doesn't exist
-LOGS_DIR = Path(__file__).parent.parent.parent / "logs"
-LOGS_DIR.mkdir(exist_ok=True)
+# Detect if running on Vercel (production)
+IS_VERCEL = os.getenv("VERCEL") == "1"
 
-# Log file paths (date-based, not timestamp-based)
-LOG_FILE = LOGS_DIR / f"teravox_{datetime.now().strftime('%Y%m%d')}.log"
-ERROR_LOG_FILE = LOGS_DIR / f"teravox_errors_{datetime.now().strftime('%Y%m%d')}.log"
+# Create logs directory if it doesn't exist (local only)
+if not IS_VERCEL:
+    LOGS_DIR = Path(__file__).parent.parent.parent / "logs"
+    LOGS_DIR.mkdir(exist_ok=True)
+    LOG_FILE = LOGS_DIR / f"teravox_{datetime.now().strftime('%Y%m%d')}.log"
+    ERROR_LOG_FILE = LOGS_DIR / f"teravox_errors_{datetime.now().strftime('%Y%m%d')}.log"
+else:
+    LOG_FILE = None
+    ERROR_LOG_FILE = None
 
 
 def get_logger(name: str) -> logging.Logger:
     """
     Get configured logger instance
+
+    On Vercel: Logs to stdout/stderr (captured by Vercel)
+    Locally: Logs to both console and files
 
     Args:
         name: Logger name (usually __name__)
@@ -32,9 +41,9 @@ def get_logger(name: str) -> logging.Logger:
     if not logger.handlers:
         logger.setLevel(logging.DEBUG)
 
-        # Console handler (INFO level)
+        # Console handler (always enabled - Vercel captures stdout)
         console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
+        console_handler.setLevel(logging.INFO if IS_VERCEL else logging.DEBUG)
         console_formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
@@ -42,25 +51,27 @@ def get_logger(name: str) -> logging.Logger:
         console_handler.setFormatter(console_formatter)
         logger.addHandler(console_handler)
 
-        # File handler (DEBUG level - everything)
-        file_handler = logging.FileHandler(LOG_FILE)
-        file_handler.setLevel(logging.DEBUG)
-        file_formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        file_handler.setFormatter(file_formatter)
-        logger.addHandler(file_handler)
+        # File handlers (local development only)
+        if not IS_VERCEL and LOG_FILE:
+            # File handler (DEBUG level - everything)
+            file_handler = logging.FileHandler(LOG_FILE)
+            file_handler.setLevel(logging.DEBUG)
+            file_formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+            file_handler.setFormatter(file_formatter)
+            logger.addHandler(file_handler)
 
-        # Error handler (ERROR level only)
-        error_handler = logging.FileHandler(ERROR_LOG_FILE)
-        error_handler.setLevel(logging.ERROR)
-        error_formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s\n%(exc_info)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        error_handler.setFormatter(error_formatter)
-        logger.addHandler(error_handler)
+            # Error handler (ERROR level only)
+            error_handler = logging.FileHandler(ERROR_LOG_FILE)
+            error_handler.setLevel(logging.ERROR)
+            error_formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s\n%(exc_info)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+            error_handler.setFormatter(error_formatter)
+            logger.addHandler(error_handler)
 
     return logger
 
