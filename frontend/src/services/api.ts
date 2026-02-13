@@ -1,7 +1,18 @@
 import axios from 'axios'
 
+// Use relative URL for production (Vercel), localhost for development
+const getBaseURL = () => {
+  // If VITE_API_URL is explicitly set, use it
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL
+  }
+  // In development (vite dev), use localhost with Vite proxy
+  // In production (deployed), use relative URL (same domain)
+  return import.meta.env.DEV ? 'http://localhost:8000' : ''
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  baseURL: getBaseURL(),
   headers: {
     'Content-Type': 'application/json',
   },
