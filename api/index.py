@@ -1,13 +1,15 @@
 """
-Vercel serverless function wrapper for FastAPI
+Vercel API entry point for Teravox
+This file is loaded by Vercel serverless functions
 """
+
 from dotenv import load_dotenv
 load_dotenv()
 
 from src.core import create_app
 
-# Create FastAPI app instance
+# Create the FastAPI app for Vercel
 app = create_app()
 
-# Vercel will use this as the handler
-# The ASGI app is directly exposed
+# Export the app for Vercel serverless functions
+# Vercel will call this as a WSGI application
