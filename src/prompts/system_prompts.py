@@ -236,7 +236,7 @@ OBJECTIVE QUESTIONS (7 types):
 1. match_columns: Create matching pairs between problems/concepts and solutions/answers. CRITICAL:
    - Column A: numbered 1, 2, 3, 4, 5...
    - Column B: lettered A, B, C, D, E... (RANDOMIZED ORDER - shuffle so NOT sequential)
-   - Answer: map Column A numbers to Column B letters. Example: {"1": "D", "2": "B", "3": "A", "4": "E", "5": "C"}
+   - Answer: map Column A numbers to Column B letters. Example: {{"1": "D", "2": "B", "3": "A", "4": "E", "5": "C"}}
    - Exactly 5+ pairs.
 2. fill_in_blanks: Create equations or statements with blanks for missing numbers. Exactly 5+ questions.
 3. circle_correct_answer: Create MCQ with exactly 4 options. Exactly 5+ questions. Include realistic distractors.
