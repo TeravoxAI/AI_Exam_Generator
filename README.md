@@ -89,7 +89,7 @@ src/
 ## 🛠️ Technology Stack
 
 - **Framework:** FastAPI
-- **LLM:** OpenAI GPT-5.1 (via OpenRouter)
+- **LLM:** OpenAI GPT-5.1 
 - **Database:** Supabase (PostgreSQL)
 - **Validation:** Pydantic
 - **Server:** Uvicorn
