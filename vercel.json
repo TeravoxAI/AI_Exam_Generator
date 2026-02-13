@@ -1,29 +1,40 @@
 {
   "version": 2,
-  "buildCommand": "cd frontend && npm run build",
-  "outputDirectory": "frontend/dist",
-  "functions": {
-    "api/index.py": {
-      "runtime": "python@3.12"
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python@latest"
+    },
+    {
+      "src": "frontend/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "buildCommand": "npm run build",
+        "outputDirectory": "dist"
+      }
     }
-  },
+  ],
   "routes": [
     {
       "src": "/(auth|fetch-content|generate-exam|generate-exam-questions|docs|openapi.json)(.*)",
-      "dest": "api/index.py",
-      "methods": ["GET", "POST", "PUT", "DELETE", "PATCH"]
+      "dest": "/api/index.py",
+      "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+    },
+    {
+      "src": "/static/(.*)",
+      "dest": "frontend/dist/static/$1"
     },
     {
       "src": "/assets/(.*)",
-      "dest": "/assets/$1"
+      "dest": "frontend/dist/assets/$1"
     },
     {
-      "src": "/index.html",
-      "dest": "/index.html"
+      "src": "/(.*\\..*)",
+      "dest": "frontend/dist/$1"
     },
     {
       "src": "/(.*)",
-      "dest": "/index.html"
+      "dest": "frontend/dist/index.html"
     }
   ]
 }
