@@ -19,7 +19,6 @@ export function QuestionRenderer({
   question,
   index,
   typeId,
-  questionId,
   isSelected,
   isEditing,
   editedQuestion,

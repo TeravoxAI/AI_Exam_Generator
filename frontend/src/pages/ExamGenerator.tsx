@@ -41,7 +41,7 @@ export default function ExamGenerator() {
   }
 
   useEffect(() => {
-    let interval: NodeJS.Timeout
+    let interval: ReturnType<typeof setInterval> | null = null
     if (loading) {
       setProgress(0)
       setLoadingMessage('Initializing exam generation...')
@@ -179,8 +179,8 @@ export default function ExamGenerator() {
     selectedQuestions.forEach(id => {
       const [category, type, index] = id.split('-')
       const questions = category === 'obj'
-        ? examResult.exam.objective?.[type]
-        : examResult.exam.subjective?.[type]
+        ? examResult?.exam?.objective?.[type]
+        : examResult?.exam?.subjective?.[type]
 
       const questionArray = Array.isArray(questions) ? questions : []
       if (questionArray && questionArray[parseInt(index)]) {
@@ -236,19 +236,6 @@ export default function ExamGenerator() {
       [questionId]: {
         ...editedQuestions[questionId],
         [field]: value
-      }
-    })
-  }
-
-  const updateEditedOption = (questionId: string, optionIndex: number, value: string) => {
-    const question = editedQuestions[questionId]
-    const newOptions = [...(question.options || [])]
-    newOptions[optionIndex] = value
-    setEditedQuestions({
-      ...editedQuestions,
-      [questionId]: {
-        ...question,
-        options: newOptions
       }
     })
   }
