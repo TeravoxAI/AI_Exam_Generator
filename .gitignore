@@ -1,0 +1,101 @@
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Project
+logs/
+responses/
+*.log
+.claude/
+
+# Frontend
+frontend/.env
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.eslintcache
+
+# Documentation (temporary/generated docs)
+*_SUMMARY.md
+*_README.md
+*_GUIDE.md
+QUICK_START.md
+START_HERE.md
+TESTING_GUIDE.md
+IMPLEMENTATION_SUMMARY.md
+FIXES_SUMMARY.md
+FRONTEND_README.md
+API_SETUP_GUIDE.md
+
+# Test files
+test_*.html
+test_*.py
+*_test.py
+
+# Screenshots and images (testing artifacts)
+*.png
+*.jpg
+*.jpeg
+*.gif
+!frontend/public/**/*.png
+!frontend/public/**/*.jpg
+!frontend/public/**/*.jpeg
+!frontend/public/**/*.gif
+!frontend/src/assets/**/*.png
+!frontend/src/assets/**/*.jpg
+!frontend/src/assets/**/*.jpeg
+!frontend/src/assets/**/*.gif
+
+# Playwright
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# Misc
+nul
+Thumbs.db
+plan.md

@@ -1,0 +1,202 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #275441;
+  --primary-dark: #1a3a2d;
+  --primary-light: #3d7a5e;
+  --background: #ded9d5;
+  --background-light: #f5f3f1;
+  --surface: #FFFFFF;
+  --text-primary: #1a1a1a;
+  --text-secondary: #5a5a5a;
+  --text-muted: #8a8a8a;
+  --border: #c5c0bc;
+  --border-light: #e5e2df;
+  --success: #3d8a5a;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --font-primary: 'Inter', sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-primary);
+  background-color: var(--background);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+/* Print Styles - Professional Exam Paper Format */
+@media print {
+  /* Reset page margins */
+  @page {
+    margin-top: 40px;
+    margin-bottom: 30px;
+    margin-left: 30px;
+    margin-right: 30px;
+    size: auto;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide everything by default */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Show only the exam content area */
+  .exam-print-area,
+  .exam-print-area * {
+    visibility: visible !important;
+  }
+
+  /* Main Print Container with padding */
+  .exam-print-area {
+    width: 100% !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    padding: 30px !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Hide all screen-only UI */
+  .no-print,
+  .screen-only,
+  header,
+  nav,
+  aside,
+  footer,
+  input[type="checkbox"],
+  button,
+  .selection-toolbar {
+    display: none !important;
+  }
+
+  /* Show print-only elements */
+  .print-only {
+    display: block !important;
+  }
+
+  /* Category section - NO BORDERS, clean layout */
+  .category-section {
+    border: none !important;
+    background: white !important;
+    margin-bottom: 24px;
+    padding: 0 !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  /* Category Headers - Bold and underlined */
+  .category-section > div:first-child,
+  .category-header {
+    font-weight: 800 !important;
+    font-size: 16px !important;
+    color: #000 !important;
+    background: white !important;
+    border-bottom: 2px solid #000 !important;
+    border-top: none !important;
+    border-left: none !important;
+    border-right: none !important;
+    padding: 8px 0 6px 0 !important;
+    margin-bottom: 16px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  /* Question containers */
+  .question-container {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin-bottom: 20px;
+    padding: 0 !important;
+    border: none !important;
+    background: white !important;
+  }
+
+  /* Hide non-selected questions */
+  .not-selected {
+    display: none !important;
+  }
+
+  /* Hide category sections that only contain unselected questions */
+  .category-section:not(:has(.question-container:not(.not-selected))) {
+    display: none !important;
+  }
+
+  /* EXAM PAPER SECTION - Hide answers, show answer spaces */
+  .exam-paper-section .answer-display {
+    display: none !important;
+  }
+
+  .exam-paper-section .answer-space {
+    display: block !important;
+    min-height: 60px;
+    border-bottom: 1px solid #ddd;
+    margin-top: 8px;
+  }
+
+  /* ANSWER KEY SECTION - Show answers, hide answer spaces */
+  .answer-key-section {
+    page-break-before: always !important;
+    display: block !important;
+  }
+
+  .answer-key-section .answer-display {
+    display: block !important;
+    margin-top: 8px;
+    padding: 8px 12px;
+    background-color: #f9f9f9 !important;
+    border-left: 3px solid #275441 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .answer-key-section .answer-space {
+    display: none !important;
+  }
+
+  .answer-key-section .question-container {
+    margin-bottom: 16px;
+  }
+
+  /* Clean up backgrounds */
+  .exam-print-area * {
+    background: white !important;
+  }
+
+  /* Preserve specific backgrounds */
+  .answer-key-section .answer-display {
+    background-color: #f9f9f9 !important;
+  }
+
+  .category-section > div:last-child {
+    padding: 0 !important;
+  }
+}
