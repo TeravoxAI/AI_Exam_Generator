@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { FileCheck, User, Sparkles, Download, GraduationCap, BookOpen, FileText, ListChecks } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { generateExam } from '../services/exam'
-import { OBJECTIVE_TYPES, SUBJECTIVE_TYPES, type ExamResponse } from '../types'
+import { OBJECTIVE_TYPES, SUBJECTIVE_TYPES, MATH_OBJECTIVE_TYPES, MATH_SUBJECTIVE_TYPES, getQuestionTypes, type ExamResponse } from '../types'
 import { QuestionRenderer } from '../components/QuestionRenderer'
 
 export default function ExamGenerator() {
@@ -194,7 +194,9 @@ export default function ExamGenerator() {
   const getQuestionTypeLabel = (typeId: string) => {
     const objType = OBJECTIVE_TYPES.find(t => t.id === typeId)
     const subjType = SUBJECTIVE_TYPES.find(t => t.id === typeId)
-    return objType?.label || subjType?.label || typeId
+    const mathObjType = MATH_OBJECTIVE_TYPES.find(t => t.id === typeId)
+    const mathSubjType = MATH_SUBJECTIVE_TYPES.find(t => t.id === typeId)
+    return objType?.label || subjType?.label || mathObjType?.label || mathSubjType?.label || typeId
   }
 
   const startEditingQuestion = (questionId: string, question: any) => {
@@ -415,15 +417,17 @@ export default function ExamGenerator() {
               <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
                 Subject
               </label>
-              <input
-                type="text"
+              <select
                 name="subject"
                 value={formData.subject}
                 onChange={handleChange}
-                placeholder="e.g., English, Math, Science"
                 required
-                className="w-full h-11 px-4 bg-[var(--background-light)] border border-[var(--border)] rounded-[var(--radius-md)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
-              />
+                className="w-full h-11 px-4 bg-[var(--background-light)] border border-[var(--border)] rounded-[var(--radius-md)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
+              >
+                <option value="">Select Subject</option>
+                <option value="English">English</option>
+                <option value="Mathematics">Mathematics</option>
+              </select>
             </div>
 
             {/* Course Page Range */}
@@ -462,51 +466,59 @@ export default function ExamGenerator() {
                 Question Types
               </label>
 
-              {/* Objective Types */}
-              <div className="mb-4">
-                <div className="h-7 px-3 bg-[var(--primary)] text-white text-xs font-medium rounded-[var(--radius-sm)] flex items-center mb-2">
-                  Objective Questions
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {OBJECTIVE_TYPES.map(type => (
-                    <button
-                      key={type.id}
-                      type="button"
-                      onClick={() => toggleQuestionType(type.id, 'objective')}
-                      className={`px-3 py-1.5 text-xs font-medium rounded-[var(--radius-sm)] transition-colors ${
-                        selectedObjective.includes(type.id)
-                          ? 'bg-[var(--primary)] text-white'
-                          : 'bg-[var(--background-light)] text-[var(--text-secondary)] hover:bg-[var(--border-light)]'
-                      }`}
-                    >
-                      {type.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              {formData.subject ? (
+                <>
+                  {/* Objective Types */}
+                  <div className="mb-4">
+                    <div className="h-7 px-3 bg-[var(--primary)] text-white text-xs font-medium rounded-[var(--radius-sm)] flex items-center mb-2">
+                      Objective Questions
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {getQuestionTypes(formData.subject).objective.map(type => (
+                        <button
+                          key={type.id}
+                          type="button"
+                          onClick={() => toggleQuestionType(type.id, 'objective')}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-[var(--radius-sm)] transition-colors ${
+                            selectedObjective.includes(type.id)
+                              ? 'bg-[var(--primary)] text-white'
+                              : 'bg-[var(--background-light)] text-[var(--text-secondary)] hover:bg-[var(--border-light)]'
+                          }`}
+                        >
+                          {type.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-              {/* Subjective Types */}
-              <div>
-                <div className="h-7 px-3 bg-[var(--primary-light)] text-white text-xs font-medium rounded-[var(--radius-sm)] flex items-center mb-2">
-                  Subjective Questions
+                  {/* Subjective Types */}
+                  <div>
+                    <div className="h-7 px-3 bg-[var(--primary-light)] text-white text-xs font-medium rounded-[var(--radius-sm)] flex items-center mb-2">
+                      Subjective Questions
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {getQuestionTypes(formData.subject).subjective.map(type => (
+                        <button
+                          key={type.id}
+                          type="button"
+                          onClick={() => toggleQuestionType(type.id, 'subjective')}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-[var(--radius-sm)] transition-colors ${
+                            selectedSubjective.includes(type.id)
+                              ? 'bg-[var(--primary-light)] text-white'
+                              : 'bg-[var(--background-light)] text-[var(--text-secondary)] hover:bg-[var(--border-light)]'
+                          }`}
+                        >
+                          {type.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm text-[var(--text-secondary)] italic">
+                  Please select a subject first to see available question types
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {SUBJECTIVE_TYPES.map(type => (
-                    <button
-                      key={type.id}
-                      type="button"
-                      onClick={() => toggleQuestionType(type.id, 'subjective')}
-                      className={`px-3 py-1.5 text-xs font-medium rounded-[var(--radius-sm)] transition-colors ${
-                        selectedSubjective.includes(type.id)
-                          ? 'bg-[var(--primary-light)] text-white'
-                          : 'bg-[var(--background-light)] text-[var(--text-secondary)] hover:bg-[var(--border-light)]'
-                      }`}
-                    >
-                      {type.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Generate Button */}

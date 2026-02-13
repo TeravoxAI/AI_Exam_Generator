@@ -66,3 +66,34 @@ export const SUBJECTIVE_TYPES: QuestionType[] = [
   { id: 'picture_description', label: 'Picture Description', category: 'subjective' },
   { id: 'unseen_comprehension_subjective', label: 'Unseen Comprehension (Subjective)', category: 'subjective' },
 ]
+
+// Mathematics Question Types (9 specific types for embedded assessment)
+export const MATH_OBJECTIVE_TYPES: QuestionType[] = [
+  { id: 'match_columns', label: 'Match the Columns', category: 'objective' },
+  { id: 'fill_in_blanks', label: 'Fill in the Blanks', category: 'objective' },
+  { id: 'circle_correct_answer', label: 'Circle the Correct Answer (MCQs)', category: 'objective' },
+  { id: 'fill_in_blanks_from_word_bank', label: 'Fill in Blanks from Word Bank', category: 'objective' },
+  { id: 'true_false', label: 'True/False Statements', category: 'objective' },
+  { id: 'label_figures', label: 'Label the Figures', category: 'objective' },
+  { id: 'short_practice_questions_missing_solution', label: 'Short Practice (Missing Solution)', category: 'objective' },
+]
+
+export const MATH_SUBJECTIVE_TYPES: QuestionType[] = [
+  { id: 'practice_questions_by_topic', label: 'Practice Questions by Topic', category: 'subjective' },
+  { id: 'real_life_story_problems', label: 'Real-Life Story Problems', category: 'subjective' },
+]
+
+// Get question types based on subject
+export function getQuestionTypes(subject: string) {
+  if (subject.toLowerCase() === 'mathematics') {
+    return {
+      objective: MATH_OBJECTIVE_TYPES,
+      subjective: MATH_SUBJECTIVE_TYPES,
+    }
+  }
+  // Default to English
+  return {
+    objective: OBJECTIVE_TYPES,
+    subjective: SUBJECTIVE_TYPES,
+  }
+}
