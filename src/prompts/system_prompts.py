@@ -25,7 +25,7 @@ OBJECTIVE (Answers are fixed/right or wrong):
    - Fields: instruction, column_a[], column_b[], answer{}, marks
    - Column A: numbered items (1, 2, 3, etc.)
    - Column B: lettered items (A, B, C, D, E, etc.)
-   - Answer format: {"1": "B", "2": "D", "3": "A"...} mapping Column A numbers to Column B letters
+   - Answer format: {{"1": "B", "2": "D", "3": "A"...}} mapping Column A numbers to Column B letters
 5. circle_correct_answer - Circle correct answer (4 options)
    - Fields: question, options[], answer, marks
 6. rearrange_sentences - Arrange sentences in order
@@ -78,7 +78,7 @@ KEY RULES:
 ✓ Match columns: instruction + column_a array + column_b array (RANDOMIZED ORDER)
   - Column A: numbered 1, 2, 3, 4, 5...
   - Column B: lettered A, B, C, D, E... (shuffled)
-  - Answer: map Column A numbers to Column B letters. Example: {"1": "B", "2": "D", "3": "A"}
+  - Answer: map Column A numbers to Column B letters. Example: {{"1": "B", "2": "D", "3": "A"}}
 ✓ Circle: Same as MCQ (4 options, one correct)
 ✓ Rearrange: sentences array + answer array in correct order
 ✓ All answers must be defensible from content
@@ -105,7 +105,7 @@ INSTRUCTIONS:
 6. For Match: Create matching pairs with clear relationships
    - Column A: numbered 1, 2, 3, 4, 5...
    - Column B: lettered A, B, C, D, E... (MUST be RANDOMIZED/SHUFFLED)
-   - Answer: map Column A numbers to Column B letters. Example: {"1": "B", "2": "D", "3": "A"}
+   - Answer: map Column A numbers to Column B letters. Example: {{"1": "B", "2": "D", "3": "A"}}
    - DO NOT use numeric indices for Column B in the answer
 7. For Rearrange: Sentences must form coherent narrative when ordered
 8. For Unseen passages: Include readable passage + multiple questions
@@ -151,7 +151,7 @@ OBJECTIVE TYPES (7 types):
    - Column A: numbered items (1, 2, 3, 4, 5...)
    - Column B: lettered items (A, B, C, D, E...)
    - Example: Column A item 1 "5+3" matches Column B answer "C" where C is "8"
-   - Answer format: {"1": "C", "2": "A", "3": "D"...} mapping Column A numbers to Column B letters
+   - Answer format: {{"1": "C", "2": "A", "3": "D"...}} mapping Column A numbers to Column B letters
 
 2. fill_in_blanks - Complete math equations/statements with missing numbers
    - Fields: question, answer, marks
@@ -212,7 +212,7 @@ KEY RULES FOR MATHEMATICS:
   - Column A: always numbered 1, 2, 3, 4, 5...
   - Column B: always lettered A, B, C, D, E... (RANDOMIZED/SHUFFLED order)
   - Answer: MUST map Column A numbers to Column B letters, NOT numbers to numbers
-  - Example: {"1": "C", "2": "A", "3": "E", "4": "B", "5": "D"}
+  - Example: {{"1": "C", "2": "A", "3": "E", "4": "B", "5": "D"}}
 ✓ Word bank: Only relevant terms; enough to make task non-trivial
 ✓ Story problems: Include realistic context, clear question, appropriate numbers
 ✓ Each question is separate object in questions array
