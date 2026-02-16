@@ -16,7 +16,7 @@
   ],
   "routes": [
     {
-      "src": "/(auth|fetch-content|generate-exam|generate-exam-questions|docs|openapi.json)(.*)",
+      "src": "/(auth|fetch-content|generate-exam|generate-exam-questions|get-my-exams|get-exam|docs|openapi.json)(.*)",
       "dest": "/api/index.py"
     },
     {
