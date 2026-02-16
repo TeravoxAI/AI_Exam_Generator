@@ -35,7 +35,7 @@ export default function Signup() {
         role: formData.role,
         school: formData.school,
       })
-      navigate('/generator')
+      navigate('/exam')
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Signup failed. Please try again.')
     } finally {

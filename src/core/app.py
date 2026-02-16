@@ -147,6 +147,98 @@ def create_app() -> FastAPI:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    @app.get("/get-my-exams")
+    async def get_my_exams(current_user: dict = Depends(get_current_user)):
+        """Get all exams created by the current user (Protected)"""
+        logger.info("=" * 80)
+        logger.info("📋 /get-my-exams ENDPOINT CALLED")
+        logger.info(f"👤 User: {current_user.get('email', 'unknown')}")
+        logger.info("=" * 80)
+
+        try:
+            user_id = current_user.get('id')
+            if not user_id:
+                raise HTTPException(status_code=400, detail="User ID not found in token")
+
+            exam_storage_service = ExamStorageService(get_supabase_service().client)
+            exams = exam_storage_service.get_exams_by_user(user_id)
+
+            logger.info(f"✅ Retrieved {len(exams)} exams for user {user_id}")
+
+            return {
+                "success": True,
+                "user_id": user_id,
+                "total_exams": len(exams),
+                "exams": exams
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"❌ Error fetching user exams: {str(e)}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "exams": []
+            }
+
+    @app.get("/debug-exam/{exam_id}")
+    async def debug_exam(exam_id: str, current_user: dict = Depends(get_current_user)):
+        """Debug endpoint to see raw exam structure (Protected)"""
+        try:
+            user_id = current_user.get('id')
+            exam_storage_service = ExamStorageService(get_supabase_service().client)
+            exam = exam_storage_service.get_exam_by_id(exam_id, user_id)
+
+            if not exam:
+                raise HTTPException(status_code=404, detail="Exam not found")
+
+            # Return the raw exam_content for debugging
+            return {
+                "success": True,
+                "exam_content": exam.get("exam_content"),
+                "make_sentences_structure": exam.get("exam_content", {}).get("subjective", {}).get("make_sentences") if exam else None
+            }
+        except Exception as e:
+            logger.error(f"Debug error: {str(e)}")
+            return {"success": False, "error": str(e)}
+
+    @app.get("/get-exam/{exam_id}")
+    async def get_exam(exam_id: str, current_user: dict = Depends(get_current_user)):
+        """Get full exam details by ID (Protected - only accessible by owner)"""
+        logger.info("=" * 80)
+        logger.info(f"📖 /get-exam/{exam_id} ENDPOINT CALLED")
+        logger.info(f"👤 User: {current_user.get('email', 'unknown')}")
+        logger.info("=" * 80)
+
+        try:
+            user_id = current_user.get('id')
+            if not user_id:
+                raise HTTPException(status_code=400, detail="User ID not found in token")
+
+            exam_storage_service = ExamStorageService(get_supabase_service().client)
+            exam = exam_storage_service.get_exam_by_id(exam_id, user_id)
+
+            if not exam:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Exam not found or you don't have permission to access it"
+                )
+
+            logger.info(f"✅ Retrieved exam {exam_id}")
+
+            return {
+                "success": True,
+                "exam": exam
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"❌ Error fetching exam {exam_id}: {str(e)}", exc_info=True)
+            return {
+                "success": False,
+                "error": str(e)
+            }
+
     @app.post("/generate-exam-questions", response_model=ExamResponse)
     async def generate_exam_questions(
         request: GenerateExamRequest,

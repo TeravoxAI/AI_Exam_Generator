@@ -375,29 +375,44 @@ export function QuestionRenderer({
       {question.instruction && (
         <p className="text-sm italic text-[var(--text-secondary)] mb-3">{question.instruction}</p>
       )}
-      <div className="space-y-3">
-        {question.words?.map((wordItem: any, idx: number) => {
-          // Handle both formats: string or object with word/answer
-          const isObject = typeof wordItem === 'object' && wordItem !== null
-          const wordText = isObject ? wordItem.word : wordItem
-          const wordAnswer = isObject && wordItem.answer ? wordItem.answer : null
 
-          return (
-            <div key={idx} className="pl-4 border-l-2 border-[var(--border)]">
-              <p className="text-sm font-medium text-[var(--text-primary)] mb-2">{idx + 1}. {wordText}</p>
-              <div className="answer-space bg-[var(--background-light)] rounded p-2">
-              </div>
-              {wordAnswer && (
-                <div className="answer-display mt-2 pt-2 border-t border-[var(--border-light)]">
-                  <div>
-                    <span className="font-bold text-sm">Sample Answer:</span> <span className="text-sm">{wordAnswer}</span>
-                  </div>
+      {/* If no instruction or words, show the question field */}
+      {!question.instruction && !question.words && question.question && (
+        <p className="text-sm text-[var(--text-primary)] mb-3">{question.question}</p>
+      )}
+
+      {/* Display words if available */}
+      {question.words && question.words.length > 0 ? (
+        <div className="space-y-3">
+          {question.words.map((wordItem: any, idx: number) => {
+            // Handle both formats: string or object with word/answer
+            const isObject = typeof wordItem === 'object' && wordItem !== null
+            const wordText = isObject ? wordItem.word : wordItem
+            const wordAnswer = isObject && wordItem.answer ? wordItem.answer : null
+
+            return (
+              <div key={idx} className="pl-4 border-l-2 border-[var(--border)]">
+                <p className="text-sm font-medium text-[var(--text-primary)] mb-2">{idx + 1}. {wordText}</p>
+                <div className="answer-space bg-[var(--background-light)] rounded p-2">
                 </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
+                {wordAnswer && (
+                  <div className="answer-display mt-2 pt-2 border-t border-[var(--border-light)]">
+                    <div>
+                      <span className="font-bold text-sm">Sample Answer:</span> <span className="text-sm">{wordAnswer}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        !question.instruction && !question.question && (
+          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-700 text-xs">
+            ⚠️ Question content not generated properly. Please regenerate this exam.
+          </div>
+        )
+      )}
     </>
   )
 

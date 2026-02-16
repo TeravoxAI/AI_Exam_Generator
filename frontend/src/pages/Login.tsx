@@ -18,7 +18,7 @@ export default function Login() {
 
     try {
       await login({ email, password })
-      navigate('/generator')
+      navigate('/exam')
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Login failed. Please try again.')
     } finally {

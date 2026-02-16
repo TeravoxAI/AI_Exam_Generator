@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react'
-import { FileCheck, User, Sparkles, Download, GraduationCap, BookOpen, FileText, ListChecks } from 'lucide-react'
+import { FileCheck, User, Sparkles, Download, GraduationCap, BookOpen, FileText, ListChecks, History } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { generateExam } from '../services/exam'
 import { OBJECTIVE_TYPES, SUBJECTIVE_TYPES, MATH_OBJECTIVE_TYPES, MATH_SUBJECTIVE_TYPES, getQuestionTypes, type ExamResponse } from '../types'
 import { QuestionRenderer } from '../components/QuestionRenderer'
+import { generateExamPDF } from '../utils/pdfGenerator'
 
 export default function ExamGenerator() {
   const { user, logout } = useAuth()
+  const navigate = useNavigate()
   const [formData, setFormData] = useState({
     grade: '',
     subject: '',
@@ -23,9 +26,33 @@ export default function ExamGenerator() {
   const [selectedQuestions, setSelectedQuestions] = useState<Set<string>>(new Set())
   const [editingQuestion, setEditingQuestion] = useState<string | null>(null)
   const [editedQuestions, setEditedQuestions] = useState<Record<string, any>>({})
+  const [downloading, setDownloading] = useState(false)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value })
+    const { name, value } = e.target
+
+    // Auto-set page ranges when subject changes
+    if (name === 'subject') {
+      if (value === 'English') {
+        setFormData({
+          ...formData,
+          subject: value,
+          coursePageRange: '110-113',
+          activityPageRange: '50-55'
+        })
+      } else if (value === 'Mathematics') {
+        setFormData({
+          ...formData,
+          subject: value,
+          coursePageRange: '143-148',
+          activityPageRange: '131-133'
+        })
+      } else {
+        setFormData({ ...formData, [name]: value })
+      }
+    } else {
+      setFormData({ ...formData, [name]: value })
+    }
   }
 
   const toggleQuestionType = (type: string, category: 'objective' | 'subjective') => {
@@ -129,10 +156,33 @@ export default function ExamGenerator() {
     }
   }
 
-  const downloadExam = () => {
-    if (!examResult?.exam) return
-    // Use browser's print functionality to save as PDF
-    window.print()
+  const downloadExam = async () => {
+    if (!examResult?.exam || selectedQuestions.size === 0) return
+
+    setDownloading(true)
+    try {
+      // Prepare exam data in the same format as ExamDetail
+      const examData = {
+        subject: formData.subject,
+        grade: formData.grade,
+        exam_content: examResult.exam,
+        created_at: new Date().toISOString()
+      }
+
+      const filename = `${formData.subject}_Grade${formData.grade}_Exam_${new Date().toISOString().split('T')[0]}.pdf`
+
+      await generateExamPDF(examData, selectedQuestions, {
+        filename,
+        includeAnswerKey: true
+      })
+
+      console.log('✅ PDF downloaded successfully')
+    } catch (error) {
+      console.error('❌ PDF download failed:', error)
+      setError('Failed to download PDF. Please try again.')
+    } finally {
+      setDownloading(false)
+    }
   }
 
   const toggleQuestionSelection = (questionId: string) => {
@@ -350,6 +400,13 @@ export default function ExamGenerator() {
           <span className="text-xl font-semibold">Exam Generator</span>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/exam-history')}
+            className="flex items-center gap-2 px-4 py-2 text-sm bg-white/10 hover:bg-white/20 rounded-md transition-colors"
+          >
+            <History size={16} />
+            My Exams
+          </button>
           <User size={32} />
           <span className="text-sm font-medium">
             {user?.firstName} {user?.lastName}
@@ -422,29 +479,43 @@ export default function ExamGenerator() {
               <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
                 Course Page Range
               </label>
-              <input
-                type="text"
+              <select
                 name="coursePageRange"
                 value={formData.coursePageRange}
                 onChange={handleChange}
-                placeholder="e.g., 110-113"
-                className="w-full h-11 px-4 bg-[var(--background-light)] border border-[var(--border)] rounded-[var(--radius-md)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
-              />
+                required
+                disabled={!formData.subject}
+                className="w-full h-11 px-4 bg-[var(--background-light)] border border-[var(--border)] rounded-[var(--radius-md)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="">Select page range</option>
+                {formData.subject === 'English' && <option value="110-113">110-113</option>}
+                {formData.subject === 'Mathematics' && <option value="143-148">143-148</option>}
+              </select>
+              {!formData.subject && (
+                <p className="text-xs text-[var(--text-muted)] mt-1">Select a subject first</p>
+              )}
             </div>
 
             {/* Activity Page Range */}
             <div>
               <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
-                Activity Page Range (Optional)
+                Activity Page Range
               </label>
-              <input
-                type="text"
+              <select
                 name="activityPageRange"
                 value={formData.activityPageRange}
                 onChange={handleChange}
-                placeholder="e.g., 50-55"
-                className="w-full h-11 px-4 bg-[var(--background-light)] border border-[var(--border)] rounded-[var(--radius-md)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
-              />
+                required
+                disabled={!formData.subject}
+                className="w-full h-11 px-4 bg-[var(--background-light)] border border-[var(--border)] rounded-[var(--radius-md)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="">Select page range</option>
+                {formData.subject === 'English' && <option value="50-55">50-55</option>}
+                {formData.subject === 'Mathematics' && <option value="131-133">131-133</option>}
+              </select>
+              {!formData.subject && (
+                <p className="text-xs text-[var(--text-muted)] mt-1">Select a subject first</p>
+              )}
             </div>
 
             {/* Question Types */}
@@ -596,50 +667,49 @@ export default function ExamGenerator() {
               {/* PRINT VIEW - Show only selected questions */}
               <div className="exam-print-area print-only hidden">
                 {/* PROFESSIONAL EXAM HEADER */}
-                <div className="mb-6 font-primary text-black">
+                <div className="exam-header">
                   {/* School Title */}
-                  <div className="text-center font-bold text-xl mb-4 uppercase tracking-wide">
-                    Army Public School (APS)
-                  </div>
+                  <div className="school-name">Army Public School (APS)</div>
+                  <div className="exam-title">Examination Paper</div>
 
                   {/* Subject and Total Marks Row */}
-                  <div className="flex justify-between items-end mb-3 font-bold text-base">
-                    <div className="flex items-center gap-3">
-                      <span className="uppercase">Subject:</span>
-                      <span className="font-normal border-b border-black px-2">{formData.subject}</span>
+                  <div className="exam-info-row">
+                    <div className="exam-info-field">
+                      <span>Subject:</span>
+                      <span>{formData.subject}</span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="exam-info-field">
                       <span>Total Marks:</span>
                       <span>{getTotalMarks()}</span>
                     </div>
                   </div>
 
                   {/* Student Info Grid */}
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-3 mb-4 text-sm font-semibold">
-                    <div className="flex items-center py-1">
-                      <span className="w-20 uppercase">Class:</span>
-                      <span className="border-b border-black flex-1 pl-2">{formData.grade}</span>
+                  <div className="student-info-grid">
+                    <div className="info-item">
+                      <span>Class:</span>
+                      <span>{formData.grade}</span>
                     </div>
-                    <div className="flex items-center py-1">
-                      <span className="w-20 uppercase">Date:</span>
-                      <span className="border-b border-black flex-1 pl-2">&nbsp;</span>
+                    <div className="info-item">
+                      <span>Date:</span>
+                      <span>&nbsp;</span>
                     </div>
-                    <div className="flex items-center py-1 col-span-2">
-                      <span className="w-20 uppercase">Name:</span>
-                      <span className="border-b border-black flex-1 pl-2">&nbsp;</span>
+                    <div className="info-item" style={{ gridColumn: '1 / -1' }}>
+                      <span>Name:</span>
+                      <span>&nbsp;</span>
                     </div>
-                    <div className="flex items-center py-1">
-                      <span className="w-20 uppercase">Roll No:</span>
-                      <span className="border-b border-black flex-1 pl-2">&nbsp;</span>
+                    <div className="info-item">
+                      <span>Roll No:</span>
+                      <span>&nbsp;</span>
                     </div>
-                    <div className="flex items-center py-1">
-                      <span className="w-20 uppercase">Section:</span>
-                      <span className="border-b border-black flex-1 pl-2">&nbsp;</span>
+                    <div className="info-item">
+                      <span>Section:</span>
+                      <span>&nbsp;</span>
                     </div>
                   </div>
 
                   {/* Instructions */}
-                  <div className="py-2 border-y-2 border-black font-bold text-center italic mb-6 text-sm">
+                  <div className="exam-instructions">
                     Note: Read questions carefully, don't overwrite and check your work.
                   </div>
                 </div>
@@ -651,10 +721,8 @@ export default function ExamGenerator() {
 
                 {/* ANSWER KEY SECTION - Starts on new page */}
                 <div className="answer-key-section">
-                  <div className="text-center font-bold text-xl mb-4 underline uppercase tracking-wide">
-                    ANSWER KEY / RUBRIC
-                  </div>
-                  <div className="mb-6 border-b-2 border-dashed border-gray-400 pb-3 text-sm">
+                  <div className="answer-key-header">ANSWER KEY / RUBRIC</div>
+                  <div className="answer-key-meta">
                     <span className="font-bold mr-2">Subject:</span> {formData.subject}
                     <span className="font-bold mx-3">|</span>
                     <span className="font-bold mr-2">Grade:</span> {formData.grade}
@@ -691,11 +759,20 @@ export default function ExamGenerator() {
                   </button>
                   <button
                     onClick={downloadExam}
-                    disabled={selectedQuestions.size === 0}
+                    disabled={selectedQuestions.size === 0 || downloading}
                     className="px-4 py-2 bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
-                    <Download size={16} />
-                    Download PDF
+                    {downloading ? (
+                      <>
+                        <Sparkles size={16} className="animate-spin" />
+                        Generating PDF...
+                      </>
+                    ) : (
+                      <>
+                        <Download size={16} />
+                        Download PDF
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

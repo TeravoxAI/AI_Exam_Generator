@@ -113,6 +113,7 @@ class ExamStorageService:
     def _calculate_stats(self, exam_content: Dict[str, Any]) -> Dict[str, int]:
         """
         Calculate statistics from exam content.
+        Handles both formats: direct arrays and wrapped in 'questions' key.
 
         Args:
             exam_content: Complete exam JSON
@@ -128,27 +129,43 @@ class ExamStorageService:
         # Count objective questions
         if "objective" in exam_content:
             for question_type, type_data in exam_content["objective"].items():
-                if isinstance(type_data, dict) and "questions" in type_data:
+                questions = []
+
+                # Handle both formats:
+                # Format 1: type_data is array directly
+                if isinstance(type_data, list):
+                    questions = type_data
+                # Format 2: type_data is dict with 'questions' key
+                elif isinstance(type_data, dict) and "questions" in type_data:
                     questions = type_data["questions"]
+
+                if questions and isinstance(questions, list):
                     objective_count += len(questions)
                     total_questions += len(questions)
 
                     # Sum marks
                     for q in questions:
-                        if "marks" in q:
+                        if isinstance(q, dict) and "marks" in q:
                             total_marks += q["marks"]
 
         # Count subjective questions
         if "subjective" in exam_content:
             for question_type, type_data in exam_content["subjective"].items():
-                if isinstance(type_data, dict) and "questions" in type_data:
+                questions = []
+
+                # Handle both formats
+                if isinstance(type_data, list):
+                    questions = type_data
+                elif isinstance(type_data, dict) and "questions" in type_data:
                     questions = type_data["questions"]
+
+                if questions and isinstance(questions, list):
                     subjective_count += len(questions)
                     total_questions += len(questions)
 
                     # Sum marks
                     for q in questions:
-                        if "marks" in q:
+                        if isinstance(q, dict) and "marks" in q:
                             total_marks += q["marks"]
 
         return {
@@ -301,3 +318,97 @@ class ExamStorageService:
         except Exception as e:
             logger.error(f"Failed to get cost summary: {str(e)}")
             return {"total_exams": 0, "total_cost_usd": 0, "by_subject": {}}
+
+    def get_exams_by_user(self, user_id: str) -> list:
+        """
+        Get all exams created by a specific user, ordered by creation date (newest first).
+        Includes exam_content to recalculate stats for accuracy.
+
+        Args:
+            user_id: The user ID to fetch exams for
+
+        Returns:
+            List of exam records with recalculated stats
+        """
+        try:
+            logger.info(f"📚 Fetching exams for user: {user_id}")
+            response = (
+                self.client.table(self.table_name)
+                .select(
+                    "exam_id, subject, grade, created_at, total_marks, total_questions, "
+                    "objective_questions_count, subjective_questions_count, course_page_range, activity_page_range, "
+                    "exam_content"
+                )
+                .eq("created_by", user_id)
+                .order("created_at", desc=True)
+                .execute()
+            )
+
+            exams = response.data or []
+
+            # Recalculate stats for each exam to ensure accuracy
+            # This fixes stats for exams saved before the bug fix
+            for exam in exams:
+                if exam.get("exam_content"):
+                    logger.debug(f"🔄 Recalculating stats for exam {exam['exam_id']}")
+                    stats = self._calculate_stats(exam["exam_content"])
+
+                    exam["total_marks"] = stats["total_marks"]
+                    exam["total_questions"] = stats["total_questions"]
+                    exam["objective_questions_count"] = stats["objective_count"]
+                    exam["subjective_questions_count"] = stats["subjective_count"]
+
+            logger.info(f"✅ Found {len(exams)} exams for user {user_id}")
+            return exams
+        except Exception as e:
+            logger.error(f"❌ Failed to retrieve exams for user {user_id}: {str(e)}")
+            return []
+
+    def get_exam_by_id(self, exam_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get full exam details by ID (with user verification for security).
+        Recalculates stats from exam_content to ensure accuracy.
+
+        Args:
+            exam_id: The exam ID
+            user_id: The user ID (to verify ownership)
+
+        Returns:
+            Full exam record with exam_content and recalculated stats, or None if not found or not owned by user
+        """
+        try:
+            logger.info(f"📖 Fetching exam {exam_id} for user {user_id}")
+            response = (
+                self.client.table(self.table_name)
+                .select("*")
+                .eq("exam_id", exam_id)
+                .eq("created_by", user_id)
+                .single()
+                .execute()
+            )
+
+            if response.data:
+                exam_data = response.data
+
+                # Recalculate stats from exam_content to ensure accuracy
+                # This fixes stats for exams saved before the bug fix
+                if exam_data.get("exam_content"):
+                    logger.info(f"🔄 Recalculating stats for exam {exam_id}")
+                    stats = self._calculate_stats(exam_data["exam_content"])
+
+                    # Update the exam data with recalculated stats
+                    exam_data["total_marks"] = stats["total_marks"]
+                    exam_data["total_questions"] = stats["total_questions"]
+                    exam_data["objective_questions_count"] = stats["objective_count"]
+                    exam_data["subjective_questions_count"] = stats["subjective_count"]
+
+                    logger.info(f"✅ Recalculated stats - {stats['total_questions']} questions, {stats['total_marks']} marks")
+
+                logger.info(f"✅ Retrieved exam {exam_id}")
+                return exam_data
+            else:
+                logger.warning(f"⚠️  Exam {exam_id} not found or user {user_id} is not the owner")
+                return None
+        except Exception as e:
+            logger.error(f"❌ Failed to retrieve exam {exam_id}: {str(e)}")
+            return None

@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import ExamGenerator from './pages/ExamGenerator'
+import ExamHistory from './pages/ExamHistory'
+import ExamDetail from './pages/ExamDetail'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -19,15 +21,33 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      {/* More specific routes MUST come before general routes */}
       <Route
-        path="/generator"
+        path="/exam/:examId"
+        element={
+          <PrivateRoute>
+            <ExamDetail />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/exam"
         element={
           <PrivateRoute>
             <ExamGenerator />
           </PrivateRoute>
         }
       />
-      <Route path="/" element={<Navigate to="/login" />} />
+      <Route
+        path="/exam-history"
+        element={
+          <PrivateRoute>
+            <ExamHistory />
+          </PrivateRoute>
+        }
+      />
+      <Route path="/generator" element={<Navigate to="/exam" />} />
+      <Route path="/" element={<Navigate to="/exam" />} />
     </Routes>
   )
 }

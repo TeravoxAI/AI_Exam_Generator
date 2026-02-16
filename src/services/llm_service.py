@@ -11,6 +11,7 @@ from typing import Dict
 
 from src.prompts import get_system_prompt, get_question_generation_prompt
 from src.utils import get_logger
+from src.utils.question_validator import validate_exam_content, QuestionValidator
 
 logger = get_logger(__name__)
 
@@ -176,6 +177,11 @@ class LLMService:
             logger.debug("✔️ Validating exam structure...")
             validated_exam = self._validate_exam_structure(exam_questions)
             logger.debug("✅ Exam structure validated")
+
+            # Apply comprehensive question validation
+            logger.info("🔍 Applying comprehensive question validation...")
+            validated_exam = validate_exam_content(validated_exam)
+            logger.info("✅ Comprehensive validation completed")
 
             total_duration = time.time() - start_time
             logger.info(f"✅ Exam generation completed in {total_duration:.2f}s")

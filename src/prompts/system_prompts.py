@@ -32,14 +32,20 @@ OBJECTIVE (Answers are fixed/right or wrong):
    - Fields: instruction, sentences[], answer[], marks
 7. unseen_comprehension_objective - Read passage, answer objective questions
    - Fields: instruction, passage, sub_questions[], marks
+   - Each sub_question has: question, options[] (4 items), answer, marks
+   - Example: {"passage": "...", "instruction": "Read and answer", "sub_questions": [{"question": "What...", "options": ["A", "B", "C", "D"], "answer": "A", "marks": 2}], "marks": 10}
 
 SUBJECTIVE (Answers vary/need explanation or creativity):
 8. short_answer - 1-3 sentence answers
    - Fields: question, answer (sample answer), marks
 9. complete_sentences - Fill blanks with appropriate words
    - Fields: instruction, sentences[], marks
+   - IMPORTANT: NO 'answer' field - instruction contains word bank
+   - Example: {"instruction": "Complete using: happy, ran", "sentences": ["The dog ___ fast."], "marks": 2}
 10. make_sentences - Create original sentences from words
     - Fields: instruction, words[], marks
+    - IMPORTANT: NO 'answer' field - students create their own sentences
+    - Example: {"instruction": "Make sentences using these words", "words": ["happy", "garden", "beautiful"], "marks": 3}
 11. long_answer - Extended response (3-5 sentences)
     - Fields: question, answer (detailed answer), marks
 12. unseen_creative_writing - Write story/paragraph from prompt
@@ -48,6 +54,8 @@ SUBJECTIVE (Answers vary/need explanation or creativity):
     - Fields: instruction, image_description, answer, marks
 14. unseen_comprehension_subjective - Read passage, answer subjective questions
     - Fields: instruction, passage, sub_questions[], marks
+    - Each sub_question has: question, answer (sample answer), marks
+    - Example: {"passage": "...", "instruction": "Read and answer", "sub_questions": [{"question": "Why...", "answer": "Because...", "marks": 3}], "marks": 15}
 
 JSON STRUCTURE MUST FOLLOW THIS EXACTLY (all 14 types):
 {
@@ -71,9 +79,9 @@ JSON STRUCTURE MUST FOLLOW THIS EXACTLY (all 14 types):
   }
 }
 
-KEY RULES:
-✓ MCQ: Exactly 4 options, one correct answer
-✓ True/False: Use "statement" (NOT "question"), answer is true or false (boolean)
+KEY RULES - FIELD NAMING IS CRITICAL:
+✓ MCQ/Circle: Use "question" field, exactly 4 options, one correct answer
+✓ True/False: Use "statement" field (NOT "question"), answer is true or false (boolean)
 ✓ Fill blanks: Question with blanks, answer with filled words
 ✓ Match columns: instruction + column_a array + column_b array (RANDOMIZED ORDER)
   - Column A: numbered 1, 2, 3, 4, 5...
@@ -81,9 +89,20 @@ KEY RULES:
   - Answer: map Column A numbers to Column B letters. Example: {{"1": "B", "2": "D", "3": "A"}}
 ✓ Circle: Same as MCQ (4 options, one correct)
 ✓ Rearrange: sentences array + answer array in correct order
+✓ Make Sentences: NO 'answer' field - students create their own sentences
+✓ Complete Sentences: NO 'answer' field - word bank is in instruction
+✓ Comprehension: Use sub_questions array with nested question/answer objects
 ✓ All answers must be defensible from content
 ✓ Each question is separate object in questions array
 ✓ marks field required for all questions
+
+FIELD NAMING BY TYPE:
+- Use "question" for: mcq, fill_in_blanks, circle_correct_answer, short_answer, long_answer
+- Use "statement" for: true_false
+- Use "instruction" for: match_columns, rearrange_sentences, make_sentences, complete_sentences, unseen_creative_writing
+- Use "passage" + "instruction" for: unseen_comprehension_objective, unseen_comprehension_subjective
+- Use "prompt" for: unseen_creative_writing
+
 ✗ DO NOT include: id, type, difficulty, bloom_level, is_correct, question_id
 ✗ DO NOT include: success, metadata, model, provider, chapter, source
 ✗ ONLY return valid JSON"""
@@ -148,10 +167,11 @@ SUPPORTED MATHEMATICS QUESTION TYPES (9 total - Embedded Assessment):
 OBJECTIVE TYPES (7 types):
 1. match_columns - Match mathematical concepts/problems to solutions
    - Fields: instruction, column_a[], column_b[], answer{}, marks
-   - Column A: numbered items (1, 2, 3, 4, 5...)
-   - Column B: lettered items (A, B, C, D, E...)
-   - Example: Column A item 1 "5+3" matches Column B answer "C" where C is "8"
-   - Answer format: {{"1": "C", "2": "A", "3": "D"...}} mapping Column A numbers to Column B letters
+   - Column A: numbered items (1, 2, 3, 4, 5...) - e.g., "1. 5+3", "2. 10-4"
+   - Column B: lettered items (A, B, C, D, E...) - e.g., "A. 6", "B. 8", "C. 3"
+   - CRITICAL: Column B must be RANDOMIZED/SHUFFLED (not sequential)
+   - Answer format: {{"1": "B", "2": "A", "3": "D"...}} mapping Column A numbers to Column B letters (NOT numbers)
+   - Example: {"instruction": "Match the problems to answers", "column_a": ["1. 5+3", "2. 10-4"], "column_b": ["A. 6", "B. 8"], "answer": {"1": "B", "2": "A"}, "marks": 2}
 
 2. fill_in_blanks - Complete math equations/statements with missing numbers
    - Fields: question, answer, marks
@@ -164,6 +184,7 @@ OBJECTIVE TYPES (7 types):
 4. fill_in_blanks_from_word_bank - Complete sentences using provided mathematical terms
    - Fields: instruction, blanks_sentence, word_bank[], answer, marks
    - Word bank contains 3-5 mathematical terms
+   - Example: {"instruction": "Fill in the blanks", "blanks_sentence": "The ___ of 5 and 3 is 8.", "word_bank": ["sum", "difference", "product"], "answer": "sum", "marks": 1}
 
 5. true_false - Mathematical statements (true or false)
    - Fields: statement, answer (true/false), marks
@@ -176,6 +197,7 @@ OBJECTIVE TYPES (7 types):
 7. short_practice_questions_missing_solution - Partially solved problems; students complete steps
    - Fields: question, partial_solution, answer, marks
    - Show work up to a point, student completes remaining steps
+   - Example: {"question": "Solve 15 + 7", "partial_solution": "Step 1: 15 + 5 = 20", "answer": "22", "marks": 2}
 
 SUBJECTIVE TYPES (2 types):
 8. practice_questions_by_topic - Full math problems on a specific topic
@@ -217,6 +239,13 @@ KEY RULES FOR MATHEMATICS:
 ✓ Story problems: Include realistic context, clear question, appropriate numbers
 ✓ Each question is separate object in questions array
 ✓ marks field required for all questions
+
+FIELD NAMING BY TYPE (CRITICAL FOR MATH):
+- Use "question" for: fill_in_blanks, circle_correct_answer, practice_questions_by_topic, real_life_story_problems, short_practice_questions_missing_solution
+- Use "instruction" for: match_columns, fill_in_blanks_from_word_bank, label_figures
+- Use "statement" for: true_false
+- Match columns: MUST use answer{} with Column A numbers → Column B letters mapping
+
 ✗ DO NOT include: id, type, difficulty, bloom_level, is_correct, question_id
 ✗ DO NOT include: success, metadata, model, provider, chapter, source
 ✗ DO NOT generate types outside of the 9 specified
