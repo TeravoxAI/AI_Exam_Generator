@@ -7,6 +7,29 @@ import { OBJECTIVE_TYPES, SUBJECTIVE_TYPES, MATH_OBJECTIVE_TYPES, MATH_SUBJECTIV
 import { QuestionRenderer } from '../components/QuestionRenderer'
 import { generateExamPDF } from '../utils/pdfGenerator'
 
+// Human-readable type labels for the exam view
+const TYPE_LABELS: Record<string, string> = {
+  mcq: 'Multiple Choice Questions',
+  true_false: 'True / False',
+  fill_in_blanks: 'Fill in the Blanks',
+  match_columns: 'Match the Columns',
+  circle_correct_answer: 'Circle the Correct Answer',
+  rearrange_sentences: 'Rearrange the Sentences',
+  unseen_comprehension_objective: 'Unseen Comprehension',
+  short_answer: 'Short Answer Questions',
+  complete_sentences: 'Complete the Sentences',
+  make_sentences: 'Make Sentences',
+  long_answer: 'Long Answer Questions',
+  unseen_creative_writing: 'Creative Writing',
+  picture_description: 'Picture Description',
+  unseen_comprehension_subjective: 'Unseen Comprehension',
+  fill_in_blanks_from_word_bank: 'Fill in the Blanks',
+  short_practice_questions_missing_solution: 'Short Practice Questions',
+  label_figures: 'Label the Figures',
+  practice_questions_by_topic: 'Practice Questions',
+  real_life_story_problems: 'Real-Life Story Problems',
+}
+
 export default function ExamGenerator() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -27,6 +50,7 @@ export default function ExamGenerator() {
   const [editingQuestion, setEditingQuestion] = useState<string | null>(null)
   const [editedQuestions, setEditedQuestions] = useState<Record<string, any>>({})
   const [downloading, setDownloading] = useState(false)
+  const [questionImages, setQuestionImages] = useState<Record<string, string>>({})
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -147,6 +171,19 @@ export default function ExamGenerator() {
       setTimeout(() => {
         setExamResult(result)
         setLoading(false)
+        // Auto-select all questions after generation
+        if (result.exam) {
+          const allIds = new Set<string>()
+          Object.entries(result.exam.objective || {}).forEach(([type, questions]) => {
+            const arr = Array.isArray(questions) ? questions : []
+            arr.forEach((_, i) => allIds.add(`obj-${type}-${i}`))
+          })
+          Object.entries(result.exam.subjective || {}).forEach(([type, questions]) => {
+            const arr = Array.isArray(questions) ? questions : []
+            arr.forEach((_, i) => allIds.add(`subj-${type}-${i}`))
+          })
+          setSelectedQuestions(allIds)
+        }
       }, 500)
     } catch (err: any) {
       console.error('Exam generation error:', err)
@@ -156,29 +193,29 @@ export default function ExamGenerator() {
     }
   }
 
+  const handleImageUpload = (questionId: string, file: File) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string
+      setQuestionImages(prev => ({ ...prev, [questionId]: dataUrl }))
+    }
+    reader.readAsDataURL(file)
+  }
+
   const downloadExam = async () => {
     if (!examResult?.exam || selectedQuestions.size === 0) return
 
     setDownloading(true)
     try {
-      // Prepare exam data in the same format as ExamDetail
       const examData = {
         subject: formData.subject,
         grade: formData.grade,
         exam_content: examResult.exam,
         created_at: new Date().toISOString()
       }
-
       const filename = `${formData.subject}_Grade${formData.grade}_Exam_${new Date().toISOString().split('T')[0]}.pdf`
-
-      await generateExamPDF(examData, selectedQuestions, {
-        filename,
-        includeAnswerKey: true
-      })
-
-      console.log('✅ PDF downloaded successfully')
+      await generateExamPDF(examData, selectedQuestions, { filename, includeAnswerKey: true }, questionImages)
     } catch (error) {
-      console.error('❌ PDF download failed:', error)
       setError('Failed to download PDF. Please try again.')
     } finally {
       setDownloading(false)
@@ -311,80 +348,106 @@ export default function ExamGenerator() {
         onSaveEditing={() => saveEditedQuestion(questionId)}
         onCancelEditing={cancelEditingQuestion}
         onUpdateField={(field, value) => updateEditedQuestion(questionId, field, value)}
+        questionImage={questionImages[questionId]}
+        onImageUpload={typeId === 'picture_description' ? (file) => handleImageUpload(questionId, file) : undefined}
       />
     )
   }
 
+  // Build sequential Q-number map across all question types
+  const buildQuestionNumberMap = (): Record<string, number> => {
+    if (!examResult?.exam) return {}
+    const map: Record<string, number> = {}
+    let qNum = 0
+    const addSection = (section: Record<string, any>) => {
+      Object.entries(section).forEach(([typeId, questions]) => {
+        const arr = Array.isArray(questions) ? questions : []
+        if (arr.length > 0) { qNum++; map[typeId] = qNum }
+      })
+    }
+    if (examResult.exam.objective) addSection(examResult.exam.objective)
+    if (examResult.exam.subjective) addSection(examResult.exam.subjective)
+    return map
+  }
+
   const renderQuestionsSection = (filterBySelection = false) => {
     if (!examResult?.exam) return null
+    const qNumMap = buildQuestionNumberMap()
 
     return (
-      <div className="max-h-[600px] overflow-auto space-y-6 print:max-h-none print:overflow-visible">
-        {/* Objective Questions */}
+      <div className="space-y-5">
+        {/* Section A label */}
         {examResult.exam.objective && Object.keys(examResult.exam.objective).length > 0 && (
-          <div className="space-y-4">
-            {Object.entries(examResult.exam.objective).map(([typeId, questions]) => {
-              // Ensure questions is an array
-              const questionArray = Array.isArray(questions) ? questions : []
-              if (questionArray.length === 0) return null
+          <div>
+            <h4 className="text-sm font-bold text-[var(--text-primary)] mb-3 pb-1 border-b-2 border-[var(--primary)] uppercase tracking-wide">
+              Section A: Objective Questions
+            </h4>
+            <div className="space-y-4">
+              {Object.entries(examResult.exam.objective).map(([typeId, questions]) => {
+                const questionArray = Array.isArray(questions) ? questions : []
+                if (questionArray.length === 0) return null
+                if (filterBySelection) {
+                  const any = questionArray.some((_, idx) => selectedQuestions.has(`obj-${typeId}-${idx}`))
+                  if (!any) return null
+                }
+                const totalTypeMarks = questionArray.reduce((s: number, q: any) => s + (q.marks || 0), 0)
+                const label = TYPE_LABELS[typeId] || getQuestionTypeLabel(typeId)
 
-              // Filter only selected questions if filterBySelection is true (for print)
-              if (filterBySelection) {
-                const filteredQuestions = questionArray.filter((_, idx) =>
-                  selectedQuestions.has(`obj-${typeId}-${idx}`)
+                return (
+                  <div key={typeId} className="bg-white rounded-lg border border-[var(--border)] overflow-hidden">
+                    {/* Q number header with collective marks */}
+                    <div className="px-4 py-2 bg-[var(--primary)] text-white flex items-center justify-between">
+                      <span className="text-sm font-bold">Q{qNumMap[typeId]}.  {label}</span>
+                      <span className="text-xs opacity-90 font-medium">({totalTypeMarks} marks)</span>
+                    </div>
+                    <div className="p-4">
+                      {questionArray.map((question: any, idx: number) => {
+                        const questionId = `obj-${typeId}-${idx}`
+                        if (filterBySelection && !selectedQuestions.has(questionId)) return null
+                        return renderQuestion(question, idx, typeId, 'objective')
+                      })}
+                    </div>
+                  </div>
                 )
-                if (filteredQuestions.length === 0) return null
-              }
-
-              return (
-                <div key={typeId} className="category-section bg-white rounded-lg border border-[var(--border)] overflow-hidden">
-                  <div className="h-9 px-4 bg-[var(--primary)] text-white text-sm font-bold flex items-center">
-                    {getQuestionTypeLabel(typeId)}
-                  </div>
-                  <div className="p-4">
-                    {questionArray.map((question: any, idx: number) => {
-                      const questionId = `obj-${typeId}-${idx}`
-                      if (filterBySelection && !selectedQuestions.has(questionId)) return null
-                      return renderQuestion(question, idx, typeId, 'objective')
-                    })}
-                  </div>
-                </div>
-              )
-            })}
+              })}
+            </div>
           </div>
         )}
 
-        {/* Subjective Questions */}
+        {/* Section B label */}
         {examResult.exam.subjective && Object.keys(examResult.exam.subjective).length > 0 && (
-          <div className="space-y-4">
-            {Object.entries(examResult.exam.subjective).map(([typeId, questions]) => {
-              // Ensure questions is an array
-              const questionArray = Array.isArray(questions) ? questions : []
-              if (questionArray.length === 0) return null
+          <div>
+            <h4 className="text-sm font-bold text-[var(--text-primary)] mb-3 pb-1 border-b-2 border-purple-600 uppercase tracking-wide">
+              Section B: Subjective Questions
+            </h4>
+            <div className="space-y-4">
+              {Object.entries(examResult.exam.subjective).map(([typeId, questions]) => {
+                const questionArray = Array.isArray(questions) ? questions : []
+                if (questionArray.length === 0) return null
+                if (filterBySelection) {
+                  const any = questionArray.some((_, idx) => selectedQuestions.has(`subj-${typeId}-${idx}`))
+                  if (!any) return null
+                }
+                const totalTypeMarks = questionArray.reduce((s: number, q: any) => s + (q.marks || 0), 0)
+                const label = TYPE_LABELS[typeId] || getQuestionTypeLabel(typeId)
 
-              // Filter only selected questions if filterBySelection is true (for print)
-              if (filterBySelection) {
-                const filteredQuestions = questionArray.filter((_, idx) =>
-                  selectedQuestions.has(`subj-${typeId}-${idx}`)
+                return (
+                  <div key={typeId} className="bg-white rounded-lg border border-[var(--border)] overflow-hidden">
+                    <div className="px-4 py-2 bg-purple-700 text-white flex items-center justify-between">
+                      <span className="text-sm font-bold">Q{qNumMap[typeId]}.  {label}</span>
+                      <span className="text-xs opacity-90 font-medium">({totalTypeMarks} marks)</span>
+                    </div>
+                    <div className="p-4">
+                      {questionArray.map((question: any, idx: number) => {
+                        const questionId = `subj-${typeId}-${idx}`
+                        if (filterBySelection && !selectedQuestions.has(questionId)) return null
+                        return renderQuestion(question, idx, typeId, 'subjective')
+                      })}
+                    </div>
+                  </div>
                 )
-                if (filteredQuestions.length === 0) return null
-              }
-
-              return (
-                <div key={typeId} className="category-section bg-white rounded-lg border border-[var(--border)] overflow-hidden">
-                  <div className="h-9 px-4 bg-[var(--primary-light)] text-white text-sm font-bold flex items-center">
-                    {getQuestionTypeLabel(typeId)}
-                  </div>
-                  <div className="p-4">
-                    {questionArray.map((question: any, idx: number) => {
-                      const questionId = `subj-${typeId}-${idx}`
-                      if (filterBySelection && !selectedQuestions.has(questionId)) return null
-                      return renderQuestion(question, idx, typeId, 'subjective')
-                    })}
-                  </div>
-                </div>
-              )
-            })}
+              })}
+            </div>
           </div>
         )}
       </div>

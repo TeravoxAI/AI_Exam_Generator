@@ -1,4 +1,12 @@
-import { Edit2, Save, X } from 'lucide-react'
+import { Edit2, Save, X, Upload } from 'lucide-react'
+import { useRef } from 'react'
+
+// Roman numeral helper for sub-part labels
+const toRoman = (n: number): string => {
+  const nums = ['i','ii','iii','iv','v','vi','vii','viii','ix','x',
+                'xi','xii','xiii','xiv','xv','xvi','xvii','xviii','xix','xx']
+  return n >= 1 && n <= 20 ? nums[n - 1] : String(n)
+}
 
 interface QuestionProps {
   question: any
@@ -13,6 +21,9 @@ interface QuestionProps {
   onSaveEditing: () => void
   onCancelEditing: () => void
   onUpdateField: (field: string, value: any) => void
+  // Image support for Picture Description
+  questionImage?: string
+  onImageUpload?: (file: File) => void
 }
 
 export function QuestionRenderer({
@@ -27,7 +38,10 @@ export function QuestionRenderer({
   onSaveEditing,
   onCancelEditing,
   onUpdateField,
+  questionImage,
+  onImageUpload,
 }: QuestionProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
   // Render specific question type content
   const renderQuestionContent = () => {
     switch (typeId) {
@@ -505,12 +519,59 @@ export function QuestionRenderer({
       {question.instruction && (
         <p className="text-sm italic text-[var(--text-secondary)] mb-3">{question.instruction}</p>
       )}
-      {question.image_description && (
-        <div className="p-3 bg-[var(--background-light)] rounded-lg mb-3 border border-[var(--border)]">
-          <p className="text-xs font-medium text-[var(--text-muted)] mb-1">Image:</p>
-          <p className="text-sm text-[var(--text-primary)] italic">{question.image_description}</p>
-        </div>
-      )}
+
+      {/* Image Upload Area */}
+      <div className="mb-3">
+        {questionImage ? (
+          <div className="relative inline-block">
+            <img
+              src={questionImage}
+              alt="Question picture"
+              className="max-w-full max-h-[200px] rounded-lg border border-[var(--border)] object-contain"
+            />
+            <button
+              onClick={() => onImageUpload && fileInputRef.current?.click()}
+              className="no-print absolute bottom-2 right-2 px-2 py-1 bg-white/90 border border-[var(--border)] rounded text-xs text-[var(--text-secondary)] hover:bg-white transition-colors"
+            >
+              Change
+            </button>
+          </div>
+        ) : (
+          <div
+            onClick={() => onImageUpload && fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+              onImageUpload
+                ? 'border-[var(--border)] hover:border-[var(--primary)] hover:bg-blue-50 cursor-pointer'
+                : 'border-[var(--border-light)] bg-[var(--background-light)]'
+            }`}
+          >
+            {onImageUpload ? (
+              <>
+                <Upload size={20} className="mx-auto mb-2 text-[var(--text-muted)]" />
+                <p className="text-sm font-medium text-[var(--text-primary)]">Click to upload picture</p>
+                <p className="text-xs text-[var(--text-muted)] mt-1">JPG, PNG, GIF supported</p>
+              </>
+            ) : (
+              <p className="text-xs text-[var(--text-muted)] italic">
+                {question.image_description || '[Picture placeholder]'}
+              </p>
+            )}
+          </div>
+        )}
+        {onImageUpload && (
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) onImageUpload(file)
+            }}
+          />
+        )}
+      </div>
+
       <div className="answer-space bg-[var(--background-light)] border border-[var(--border)] rounded-lg p-3 min-h-[60px]">
       </div>
       {question.answer && (
@@ -702,28 +763,30 @@ export function QuestionRenderer({
   )
 
   return (
-    <div className={`question-container border-b border-[var(--border-light)] last:border-0 pb-4 last:pb-0 mb-4 last:mb-0 ${!isSelected ? 'not-selected' : ''}`}>
-      <div className="flex items-start gap-3 print:block">
+    <div className={`question-container border-b border-[var(--border-light)] last:border-0 pb-4 last:pb-0 mb-4 last:mb-0 ${!isSelected ? 'opacity-50' : ''}`}>
+      <div className="flex items-start gap-3">
         <input
           type="checkbox"
           checked={isSelected}
           onChange={onToggleSelection}
-          className="no-print mt-1 w-4 h-4 accent-[var(--primary)]"
+          className="no-print mt-1 w-4 h-4 accent-[var(--primary)] shrink-0"
         />
-        <div className="flex-1">
-          <div className="flex items-center justify-between mb-2 print:mb-3">
-            <span className="text-sm font-semibold text-[var(--text-primary)]">Question {index + 1}</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-2">
+            {/* Sub-part label: (i), (ii), (iii)... */}
+            <span className="text-sm font-bold text-[var(--text-secondary)]">({toRoman(index + 1)})</span>
             <div className="flex items-center gap-2">
-              {isEditing ? (
-                <input
-                  type="number"
-                  value={editedQuestion.marks}
-                  onChange={(e) => onUpdateField('marks', parseInt(e.target.value))}
-                  className="w-16 h-7 px-2 text-xs border border-[var(--border)] rounded"
-                  min="1"
-                />
-              ) : (
-                <span className="text-xs text-[var(--text-muted)] print:text-[var(--text-primary)]">{question.marks} marks</span>
+              {isEditing && (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-[var(--text-muted)]">Marks:</span>
+                  <input
+                    type="number"
+                    value={editedQuestion.marks}
+                    onChange={(e) => onUpdateField('marks', parseInt(e.target.value))}
+                    className="w-14 h-7 px-2 text-xs border border-[var(--border)] rounded"
+                    min="1"
+                  />
+                </div>
               )}
               {!isEditing && (
                 <button
