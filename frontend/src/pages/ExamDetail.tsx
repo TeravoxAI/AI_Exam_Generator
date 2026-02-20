@@ -1,9 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { User, ArrowLeft, Download, Sparkles, BookOpen } from 'lucide-react'
+import { User, ArrowLeft, Download, Sparkles, BookOpen, Upload, Image } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { getExamById, type ExamDetailResponse } from '../services/exam'
 import { generateExamPDF } from '../utils/pdfGenerator'
+
+// Roman numerals for sub-part labels
+const toRoman = (n: number): string => {
+  const nums = ['i','ii','iii','iv','v','vi','vii','viii','ix','x',
+                'xi','xii','xiii','xiv','xv','xvi','xvii','xviii','xix','xx']
+  return n >= 1 && n <= 20 ? nums[n - 1] : String(n)
+}
 
 export default function ExamDetail() {
   const { examId } = useParams<{ examId: string }>()
@@ -14,385 +21,461 @@ export default function ExamDetail() {
   const [error, setError] = useState('')
   const [selectedQuestions, setSelectedQuestions] = useState<Set<string>>(new Set())
   const [downloading, setDownloading] = useState(false)
+  // questionImages: maps questionId -> base64 data URL for Picture Description
+  const [questionImages, setQuestionImages] = useState<Record<string, string>>({})
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   useEffect(() => {
     const fetchExam = async () => {
-      if (!examId) {
-        console.log('❌ No exam ID provided')
-        return
-      }
-
-      console.log('📋 Fetching exam:', examId)
+      if (!examId) return
       setLoading(true)
       setError('')
-
       try {
         const response = await getExamById(examId)
-        console.log('📥 Exam response:', response)
-
         if (response.success && response.exam) {
-          console.log('✅ Exam loaded successfully')
-          console.log('Exam content:', response.exam.exam_content)
           setExam(response.exam)
-          // Auto-select all questions
           selectAllQuestions(response.exam)
         } else {
-          const errorMsg = response.error || 'Failed to load exam'
-          console.error('❌ Exam load failed:', errorMsg)
-          setError(errorMsg)
+          setError(response.error || 'Failed to load exam')
         }
       } catch (err: any) {
-        console.error('❌ Error fetching exam:', err)
-        const errorMsg = err.response?.data?.detail || err.message || 'Failed to load exam. Please try logging in again.'
-        setError(errorMsg)
+        setError(err.response?.data?.detail || err.message || 'Failed to load exam. Please try logging in again.')
       } finally {
         setLoading(false)
       }
     }
-
     fetchExam()
   }, [examId])
 
   const selectAllQuestions = (examData: any) => {
     const allIds = new Set<string>()
-
-    if (!examData || !examData.exam_content) {
-      console.warn('⚠️ No exam content found')
-      setSelectedQuestions(allIds)
-      return
-    }
-
+    if (!examData?.exam_content) { setSelectedQuestions(allIds); return }
     if (examData.exam_content?.objective) {
       Object.entries(examData.exam_content.objective).forEach(([typeId, questions]: [string, any]) => {
-        const questionArray = Array.isArray(questions) ? questions : []
-        questionArray.forEach((_, index) => {
-          allIds.add(`obj-${typeId}-${index}`)
-        })
+        const arr = Array.isArray(questions) ? questions : []
+        arr.forEach((_, i) => allIds.add(`obj-${typeId}-${i}`))
       })
     }
-
     if (examData.exam_content?.subjective) {
       Object.entries(examData.exam_content.subjective).forEach(([typeId, questions]: [string, any]) => {
-        const questionArray = Array.isArray(questions) ? questions : []
-        questionArray.forEach((_, index) => {
-          allIds.add(`subj-${typeId}-${index}`)
-        })
+        const arr = Array.isArray(questions) ? questions : []
+        arr.forEach((_, i) => allIds.add(`subj-${typeId}-${i}`))
       })
     }
-
-    console.log(`✅ Selected ${allIds.size} questions`)
     setSelectedQuestions(allIds)
   }
 
   const toggleQuestionSelection = (questionId: string) => {
     setSelectedQuestions(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(questionId)) {
-        newSet.delete(questionId)
-      } else {
-        newSet.add(questionId)
-      }
-      return newSet
+      const next = new Set(prev)
+      if (next.has(questionId)) next.delete(questionId)
+      else next.add(questionId)
+      return next
     })
   }
 
   const getTotalMarks = () => {
     if (!exam?.exam_content) return 0
     let total = 0
-
     selectedQuestions.forEach(id => {
-      const [category, type, index] = id.split('-')
+      const parts = id.split('-')
+      const category = parts[0]
+      const type = parts.slice(1, -1).join('-')
+      const index = parseInt(parts[parts.length - 1])
       const questions = category === 'obj'
         ? exam.exam_content?.objective?.[type]
         : exam.exam_content?.subjective?.[type]
-
-      const questionArray = Array.isArray(questions) ? questions : []
-      if (questionArray && questionArray[parseInt(index)]) {
-        total += questionArray[parseInt(index)].marks || 0
-      }
+      const arr = Array.isArray(questions) ? questions : []
+      if (arr[index]) total += arr[index].marks || 0
     })
-
     return total
+  }
+
+  const handleImageUpload = (questionId: string, file: File) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string
+      setQuestionImages(prev => ({ ...prev, [questionId]: dataUrl }))
+    }
+    reader.readAsDataURL(file)
   }
 
   const downloadExam = async () => {
     if (!exam || selectedQuestions.size === 0) return
-
     setDownloading(true)
     try {
       const filename = `${exam.subject}_Grade${exam.grade}_Exam_${new Date().toISOString().split('T')[0]}.pdf`
-
-      await generateExamPDF(exam, selectedQuestions, {
-        filename,
-        includeAnswerKey: true
-      })
-
-      console.log('✅ PDF downloaded successfully')
+      await generateExamPDF(exam, selectedQuestions, { filename, includeAnswerKey: true }, questionImages)
     } catch (error) {
-      console.error('❌ PDF download failed:', error)
       setError('Failed to download PDF. Please try again.')
     } finally {
       setDownloading(false)
     }
   }
 
-  const getQuestionTypeLabel = (typeId: string) => {
-    // Convert snake_case to Title Case
-    return typeId
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ')
-  }
+  const getQuestionTypeLabel = (typeId: string) =>
+    typeId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
 
   const formatAnswer = (answer: any) => {
     if (!answer) return 'N/A'
-
-    // If answer is an object (like match columns), convert to string
-    if (typeof answer === 'object' && !Array.isArray(answer)) {
-      return Object.entries(answer)
-        .map(([key, value]) => `${key} → ${value}`)
-        .join(', ')
-    }
-
-    // If answer is an array, join with commas
-    if (Array.isArray(answer)) {
-      return answer.join(', ')
-    }
-
-    // Otherwise return as-is
+    if (typeof answer === 'boolean') return answer ? 'True' : 'False'
+    if (typeof answer === 'object' && !Array.isArray(answer))
+      return Object.entries(answer).map(([k, v]) => `${k} → ${v}`).join(', ')
+    if (Array.isArray(answer)) return answer.join(', ')
     return String(answer)
   }
 
-  const renderQuestionsSection = (filterBySelection = false) => {
+  // Build a sequential question-number map: typeId -> Q number (across all types)
+  const buildQuestionNumberMap = (): Record<string, number> => {
+    if (!exam?.exam_content) return {}
+    const map: Record<string, number> = {}
+    let qNum = 0
+    const addTypes = (section: Record<string, any>) => {
+      Object.entries(section).forEach(([typeId, questions]) => {
+        const arr = Array.isArray(questions) ? questions : []
+        if (arr.length > 0) {
+          qNum++
+          map[typeId] = qNum
+        }
+      })
+    }
+    if (exam.exam_content.objective) addTypes(exam.exam_content.objective)
+    if (exam.exam_content.subjective) addTypes(exam.exam_content.subjective)
+    return map
+  }
+
+  const renderQuestionsSection = () => {
     if (!exam?.exam_content) return null
+    const qNumMap = buildQuestionNumberMap()
 
     return (
-      <div className={filterBySelection ? "space-y-6" : "max-h-[600px] overflow-auto space-y-6 print:max-h-none print:overflow-visible"}>
+      <div className="space-y-6">
         {/* Objective Questions */}
         {exam.exam_content.objective && Object.keys(exam.exam_content.objective).length > 0 && (
-          <div className="space-y-4">
-            {Object.entries(exam.exam_content.objective).map(([typeId, questions]) => {
-              const questionArray = Array.isArray(questions) ? questions : []
-              if (questionArray.length === 0) return null
+          <div>
+            <h4 className="text-base font-bold text-[var(--text-primary)] mb-3 pb-2 border-b-2 border-[var(--primary)] uppercase tracking-wide">
+              Section A: Objective Questions
+            </h4>
+            <div className="space-y-4">
+              {Object.entries(exam.exam_content.objective).map(([typeId, questions]) => {
+                const questionArray = Array.isArray(questions) ? questions : []
+                if (questionArray.length === 0) return null
+                const mainQNum = qNumMap[typeId] || ''
+                const typeMarks = questionArray.reduce((s: number, q: any) => s + (q.marks || 0), 0)
 
-              if (filterBySelection) {
-                const filteredQuestions = questionArray.filter((_, idx) =>
-                  selectedQuestions.has(`obj-${typeId}-${idx}`)
-                )
-                if (filteredQuestions.length === 0) return null
-              }
+                return (
+                  <div key={typeId} className="bg-white rounded-lg border border-[var(--border)] overflow-hidden">
+                    {/* Question type header */}
+                    <div className="px-4 py-2 bg-[var(--primary)] text-white flex items-center justify-between">
+                      <span className="text-sm font-bold">
+                        Q{mainQNum}. {getQuestionTypeLabel(typeId)}
+                      </span>
+                      <span className="text-xs opacity-80">({typeMarks} marks)</span>
+                    </div>
 
-              return (
-                <div key={typeId} className="category-section bg-white rounded-lg border border-[var(--border)] overflow-hidden">
-                  <div className="h-9 px-4 bg-[var(--primary)] text-white text-sm font-bold flex items-center">
-                    {getQuestionTypeLabel(typeId)}
-                  </div>
-                  <div className="p-4">
-                    {questionArray.map((question: any, idx: number) => {
-                      const questionId = `obj-${typeId}-${idx}`
-                      if (filterBySelection && !selectedQuestions.has(questionId)) return null
+                    {/* Individual items */}
+                    <div className="p-4 space-y-3">
+                      {questionArray.map((question: any, idx: number) => {
+                        const questionId = `obj-${typeId}-${idx}`
+                        const isSelected = selectedQuestions.has(questionId)
 
-                      return (
-                        <div key={questionId} className={`question-container mb-6 ${filterBySelection ? 'p-0' : 'p-4 bg-[var(--background-light)] rounded-lg'}`}>
-                          {/* Screen view with checkbox */}
-                          {!filterBySelection && (
-                            <div className="flex items-start gap-3">
-                              <input
-                                type="checkbox"
-                                checked={selectedQuestions.has(questionId)}
-                                onChange={() => toggleQuestionSelection(questionId)}
-                                className="mt-1 w-4 h-4 cursor-pointer"
-                              />
-                              <div className="flex-1">
-                                {/* For questions with sub_questions (comprehension) */}
-                                {question.sub_questions ? (
-                                  <div>
-                                    <div className="font-semibold text-[var(--text-primary)] mb-2">
-                                      Q{idx + 1}. {question.instruction || 'Read the passage carefully'}
+                        return (
+                          <div key={questionId}
+                            className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${isSelected ? 'bg-[var(--background-light)] border-[var(--border-light)]' : 'bg-white border-dashed border-gray-200 opacity-50'}`}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleQuestionSelection(questionId)}
+                              className="mt-1 w-4 h-4 cursor-pointer accent-[var(--primary)] shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              {/* Sub-part label */}
+                              <span className="text-xs font-bold text-[var(--text-secondary)] mr-1">({toRoman(idx + 1)})</span>
+
+                              {/* Question content based on type */}
+                              {typeId === 'unseen_comprehension_objective' ? (
+                                <div>
+                                  {question.passage && (
+                                    <div className="mt-1 p-3 bg-gray-50 rounded-lg border border-gray-200 text-sm italic text-gray-700 mb-3">
+                                      <p className="text-xs font-bold text-gray-500 mb-1 not-italic">Passage:</p>
+                                      {question.passage}
                                     </div>
-                                    {question.passage && (
-                                      <div className="p-3 bg-gray-50 rounded-lg mb-3 text-sm italic">
-                                        {question.passage}
-                                      </div>
-                                    )}
-                                    <div className="ml-4 space-y-3">
-                                      {question.sub_questions.map((subQ: any, subIdx: number) => (
-                                        <div key={subIdx} className="border-l-2 border-blue-300 pl-3">
-                                          <p className="text-sm font-medium">{subIdx + 1}. {subQ.question}</p>
-                                          <p className="text-xs text-[var(--text-muted)] mt-1">Marks: {subQ.marks}</p>
-                                          <div className="mt-2 p-2 bg-green-50 border-l-4 border-green-600 text-sm">
-                                            <strong>Answer:</strong> {subQ.answer || 'N/A'}
-                                          </div>
+                                  )}
+                                  {(question.sub_questions || []).map((subQ: any, si: number) => (
+                                    <div key={si} className="ml-2 mb-2 border-l-2 border-blue-200 pl-3">
+                                      <p className="text-sm font-medium">{toRoman(si + 1)}. {subQ.question}</p>
+                                      {subQ.options && (
+                                        <div className="ml-3 mt-1 grid grid-cols-2 gap-1">
+                                          {subQ.options.map((opt: string, oi: number) => (
+                                            <span key={oi} className="text-xs text-gray-600">
+                                              {String.fromCharCode(97 + oi)}) {opt}
+                                            </span>
+                                          ))}
                                         </div>
-                                      ))}
-                                    </div>
-                                    <div className="mt-2 text-xs text-[var(--text-muted)]">
-                                      <span>Total Marks: {question.marks || 0}</span>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  /* For simple questions */
-                                  <div>
-                                    <div className="font-semibold text-[var(--text-primary)] mb-2">
-                                      Q{idx + 1}. {question.question || question.statement || question.instruction}
-                                    </div>
-                                    {question.options && (
-                                      <div className="ml-4 space-y-1">
-                                        {question.options.map((option: string, optIdx: number) => (
-                                          <div key={optIdx} className="text-sm text-[var(--text-secondary)]">
-                                            {String.fromCharCode(65 + optIdx)}) {option}
-                                          </div>
-                                        ))}
+                                      )}
+                                      <div className="mt-1 text-xs text-green-700 bg-green-50 px-2 py-1 rounded border-l-2 border-green-400">
+                                        <strong>Answer:</strong> {subQ.answer}  <span className="text-gray-400">({subQ.marks} marks)</span>
                                       </div>
-                                    )}
-                                    <div className="mt-2 text-xs text-[var(--text-muted)] flex gap-4">
-                                      <span>Marks: {question.marks || 0}</span>
-                                      {question.difficulty && <span>Difficulty: {question.difficulty}</span>}
-                                      {question.bloom_level && <span>Bloom: {question.bloom_level}</span>}
-                                    </div>
-                                    <div className="answer-display mt-3 p-2 bg-green-50 border-l-4 border-green-600 text-sm">
-                                      <strong>Answer:</strong> {formatAnswer(question.answer)}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Print view without checkbox */}
-                          {filterBySelection && (
-                            <div className="mb-4">
-                              <div className="font-semibold text-black mb-1">
-                                Q{idx + 1}. {question.question}
-                              </div>
-                              {question.options && (
-                                <div className="ml-4 space-y-1 mb-2">
-                                  {question.options.map((option: string, optIdx: number) => (
-                                    <div key={optIdx} className="text-sm text-black">
-                                      {String.fromCharCode(65 + optIdx)}) {option}
                                     </div>
                                   ))}
                                 </div>
+                              ) : typeId === 'match_columns' ? (
+                                <div>
+                                  {question.instruction && (
+                                    <p className="text-xs italic text-gray-500 mb-2">{question.instruction}</p>
+                                  )}
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                      <p className="text-xs font-semibold text-gray-500 mb-1">Column A</p>
+                                      {(question.column_a || []).map((item: string, i: number) => (
+                                        <p key={i} className="text-sm">{i + 1}. {item}</p>
+                                      ))}
+                                    </div>
+                                    <div>
+                                      <p className="text-xs font-semibold text-gray-500 mb-1">Column B</p>
+                                      {(question.column_b || []).map((item: string, i: number) => (
+                                        <p key={i} className="text-sm">{String.fromCharCode(65 + i)}. {item}</p>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  {question.answer && (
+                                    <div className="mt-2 text-xs text-green-700 bg-green-50 px-2 py-1 rounded border-l-2 border-green-400">
+                                      <strong>Answer:</strong> {formatAnswer(question.answer)}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : typeId === 'true_false' ? (
+                                <div>
+                                  <span className="text-sm text-[var(--text-primary)]">{question.statement}</span>
+                                  <div className="mt-1 text-xs text-green-700 bg-green-50 px-2 py-1 rounded inline-block border-l-2 border-green-400 ml-2">
+                                    <strong>Answer:</strong> {question.answer ? 'True' : 'False'}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div>
+                                  <span className="text-sm text-[var(--text-primary)]">
+                                    {question.question || question.statement || question.instruction}
+                                  </span>
+                                  {question.options && (
+                                    <div className="mt-1 ml-2 grid grid-cols-2 gap-1">
+                                      {question.options.map((opt: string, oi: number) => (
+                                        <span key={oi} className="text-xs text-gray-600">
+                                          {String.fromCharCode(97 + oi)}) {opt}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {question.answer !== undefined && (
+                                    <div className="mt-1 text-xs text-green-700 bg-green-50 px-2 py-1 rounded border-l-2 border-green-400">
+                                      <strong>Answer:</strong> {formatAnswer(question.answer)}
+                                      <span className="text-gray-400 ml-2">({question.marks} marks)</span>
+                                    </div>
+                                  )}
+                                </div>
                               )}
-                              <div className="text-xs text-gray-600 mb-2">Marks: {question.marks || 0}</div>
-                              <div className="answer-space"></div>
-                              <div className="answer-display mt-2 pt-2 border-t border-gray-300">
-                                <strong className="text-sm">Answer:</strong> {formatAnswer(question.answer)}
-                              </div>
                             </div>
-                          )}
-                        </div>
-                      )
-                    })}
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
         )}
 
         {/* Subjective Questions */}
         {exam.exam_content.subjective && Object.keys(exam.exam_content.subjective).length > 0 && (
-          <div className="space-y-4">
-            {Object.entries(exam.exam_content.subjective).map(([typeId, questions]) => {
-              const questionArray = Array.isArray(questions) ? questions : []
-              if (questionArray.length === 0) return null
+          <div>
+            <h4 className="text-base font-bold text-[var(--text-primary)] mb-3 pb-2 border-b-2 border-purple-600 uppercase tracking-wide">
+              Section B: Subjective Questions
+            </h4>
+            <div className="space-y-4">
+              {Object.entries(exam.exam_content.subjective).map(([typeId, questions]) => {
+                const questionArray = Array.isArray(questions) ? questions : []
+                if (questionArray.length === 0) return null
+                const mainQNum = qNumMap[typeId] || ''
+                const typeMarks = questionArray.reduce((s: number, q: any) => s + (q.marks || 0), 0)
 
-              if (filterBySelection) {
-                const filteredQuestions = questionArray.filter((_, idx) =>
-                  selectedQuestions.has(`subj-${typeId}-${idx}`)
-                )
-                if (filteredQuestions.length === 0) return null
-              }
+                return (
+                  <div key={typeId} className="bg-white rounded-lg border border-[var(--border)] overflow-hidden">
+                    <div className="px-4 py-2 bg-purple-700 text-white flex items-center justify-between">
+                      <span className="text-sm font-bold">
+                        Q{mainQNum}. {getQuestionTypeLabel(typeId)}
+                      </span>
+                      <span className="text-xs opacity-80">({typeMarks} marks)</span>
+                    </div>
 
-              return (
-                <div key={typeId} className="category-section bg-white rounded-lg border border-[var(--border)] overflow-hidden">
-                  <div className="h-9 px-4 bg-[var(--primary-light)] text-white text-sm font-bold flex items-center">
-                    {getQuestionTypeLabel(typeId)}
-                  </div>
-                  <div className="p-4">
-                    {questionArray.map((question: any, idx: number) => {
-                      const questionId = `subj-${typeId}-${idx}`
-                      if (filterBySelection && !selectedQuestions.has(questionId)) return null
+                    <div className="p-4 space-y-3">
+                      {questionArray.map((question: any, idx: number) => {
+                        const questionId = `subj-${typeId}-${idx}`
+                        const isSelected = selectedQuestions.has(questionId)
 
-                      return (
-                        <div key={questionId} className={`question-container mb-6 ${filterBySelection ? 'p-0' : 'p-4 bg-[var(--background-light)] rounded-lg'}`}>
-                          {/* Screen view with checkbox */}
-                          {!filterBySelection && (
-                            <div className="flex items-start gap-3">
-                              <input
-                                type="checkbox"
-                                checked={selectedQuestions.has(questionId)}
-                                onChange={() => toggleQuestionSelection(questionId)}
-                                className="mt-1 w-4 h-4 cursor-pointer"
-                              />
-                              <div className="flex-1">
-                                {/* For questions with sub_questions (comprehension) */}
-                                {question.sub_questions ? (
-                                  <div>
-                                    <div className="font-semibold text-[var(--text-primary)] mb-2">
-                                      Q{idx + 1}. {question.instruction || 'Read the passage carefully'}
+                        return (
+                          <div key={questionId}
+                            className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${isSelected ? 'bg-[var(--background-light)] border-[var(--border-light)]' : 'bg-white border-dashed border-gray-200 opacity-50'}`}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleQuestionSelection(questionId)}
+                              className="mt-1 w-4 h-4 cursor-pointer accent-purple-600 shrink-0"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <span className="text-xs font-bold text-[var(--text-secondary)] mr-1">({toRoman(idx + 1)})</span>
+
+                              {typeId === 'unseen_comprehension_subjective' ? (
+                                <div>
+                                  {question.passage && (
+                                    <div className="mt-1 p-3 bg-gray-50 rounded-lg border border-gray-200 text-sm italic text-gray-700 mb-3">
+                                      <p className="text-xs font-bold text-gray-500 mb-1 not-italic">Passage:</p>
+                                      {question.passage}
                                     </div>
-                                    {question.passage && (
-                                      <div className="p-3 bg-gray-50 rounded-lg mb-3 text-sm italic">
-                                        {question.passage}
+                                  )}
+                                  {(question.sub_questions || []).map((subQ: any, si: number) => (
+                                    <div key={si} className="ml-2 mb-2 border-l-2 border-purple-200 pl-3">
+                                      <p className="text-sm font-medium">{toRoman(si + 1)}. {subQ.question}</p>
+                                      <p className="text-xs text-gray-500">({subQ.marks} marks)</p>
+                                      <div className="mt-1 text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded border-l-2 border-blue-400">
+                                        <strong>Sample Answer:</strong> {subQ.answer}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : typeId === 'make_sentences' ? (
+                                <div>
+                                  {question.instruction && (
+                                    <p className="text-xs italic text-gray-500 mb-2">{question.instruction}</p>
+                                  )}
+                                  {(question.words || []).map((wordItem: any, wi: number) => {
+                                    const isObj = typeof wordItem === 'object' && wordItem !== null
+                                    const word = isObj ? wordItem.word : wordItem
+                                    const sampleAns = isObj ? wordItem.answer : null
+                                    return (
+                                      <div key={wi} className="mb-1">
+                                        <span className="text-sm font-semibold">{toRoman(wi + 1)}. {word}</span>
+                                        {sampleAns && (
+                                          <div className="mt-0.5 text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded border-l-2 border-blue-400">
+                                            <strong>Sample:</strong> {sampleAns}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              ) : typeId === 'picture_description' ? (
+                                <div>
+                                  <p className="text-sm text-[var(--text-primary)] mb-2">
+                                    {question.instruction || 'Look at the picture and describe it.'}
+                                  </p>
+                                  {/* Image upload */}
+                                  <div className="mb-2">
+                                    {questionImages[`subj-picture_description-${idx}`] ? (
+                                      <div className="relative inline-block">
+                                        <img
+                                          src={questionImages[`subj-picture_description-${idx}`]}
+                                          alt="Question image"
+                                          className="max-w-[200px] max-h-[150px] rounded border border-gray-300 object-contain"
+                                        />
+                                        <button
+                                          onClick={() => {
+                                            const newImages = { ...questionImages }
+                                            delete newImages[`subj-picture_description-${idx}`]
+                                            setQuestionImages(newImages)
+                                          }}
+                                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                                        >×</button>
+                                      </div>
+                                    ) : (
+                                      <div>
+                                        <input
+                                          type="file"
+                                          accept="image/*"
+                                          className="hidden"
+                                          ref={el => { fileInputRefs.current[`subj-picture_description-${idx}`] = el }}
+                                          onChange={(e) => {
+                                            const file = e.target.files?.[0]
+                                            if (file) handleImageUpload(`subj-picture_description-${idx}`, file)
+                                          }}
+                                        />
+                                        <button
+                                          onClick={() => fileInputRefs.current[`subj-picture_description-${idx}`]?.click()}
+                                          className="flex items-center gap-2 px-3 py-1.5 text-xs bg-[var(--background-light)] border border-dashed border-[var(--border)] rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                                        >
+                                          <Upload size={12} />
+                                          Upload Picture for this Question
+                                        </button>
+                                        {question.image_description && (
+                                          <p className="mt-1 text-xs italic text-gray-400">{question.image_description}</p>
+                                        )}
                                       </div>
                                     )}
-                                    <div className="ml-4 space-y-3">
-                                      {question.sub_questions.map((subQ: any, subIdx: number) => (
-                                        <div key={subIdx} className="border-l-2 border-purple-300 pl-3">
-                                          <p className="text-sm font-medium">{subIdx + 1}. {subQ.question}</p>
-                                          <p className="text-xs text-[var(--text-muted)] mt-1">Marks: {subQ.marks}</p>
-                                          <div className="mt-2 p-2 bg-blue-50 border-l-4 border-blue-600 text-sm">
-                                            <strong>Sample Answer:</strong> {subQ.answer || 'N/A'}
+                                  </div>
+                                  {question.answer && (
+                                    <div className="text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded border-l-2 border-blue-400">
+                                      <strong>Sample Answer:</strong> {question.answer}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : typeId === 'unseen_creative_writing' ? (
+                                <div>
+                                  {question.instruction && (
+                                    <p className="text-sm italic text-gray-500 mb-1">{question.instruction}</p>
+                                  )}
+                                  {question.prompt && (
+                                    <div className="p-2 bg-amber-50 border border-amber-200 rounded text-sm font-medium text-amber-900 mb-2">
+                                      Topic: {question.prompt}
+                                    </div>
+                                  )}
+                                  {question.answer && (
+                                    <div className="text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded border-l-2 border-blue-400">
+                                      <strong>Sample Answer:</strong> {question.answer}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : typeId === 'complete_sentences' ? (
+                                <div>
+                                  {question.instruction && (
+                                    <p className="text-xs italic text-gray-500 mb-2">{question.instruction}</p>
+                                  )}
+                                  {(question.sentences || []).map((sent: any, si: number) => {
+                                    const isObj = typeof sent === 'object' && sent !== null
+                                    const text = isObj ? sent.incomplete || sent.sentence : sent
+                                    const ans = isObj ? sent.answer : null
+                                    return (
+                                      <div key={si} className="mb-1">
+                                        <p className="text-sm">{toRoman(si + 1)}. {text}</p>
+                                        {ans && (
+                                          <div className="mt-0.5 text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded border-l-2 border-blue-400">
+                                            <strong>Answer:</strong> {ans}
                                           </div>
-                                        </div>
-                                      ))}
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              ) : (
+                                <div>
+                                  <span className="text-sm text-[var(--text-primary)]">
+                                    {question.question || question.statement || question.instruction || question.prompt}
+                                  </span>
+                                  {(question.sample_answer || question.answer) && (
+                                    <div className="mt-2 text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded border-l-2 border-blue-400">
+                                      <strong>Sample Answer:</strong> {question.sample_answer || question.answer}
+                                      <span className="text-gray-400 ml-2">({question.marks} marks)</span>
                                     </div>
-                                    <div className="mt-2 text-xs text-[var(--text-muted)]">
-                                      <span>Total Marks: {question.marks || 0}</span>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  /* For simple questions */
-                                  <div>
-                                    <div className="font-semibold text-[var(--text-primary)] mb-2">
-                                      Q{idx + 1}. {question.question || question.statement || question.instruction || question.prompt}
-                                    </div>
-                                    <div className="mt-2 text-xs text-[var(--text-muted)] flex gap-4">
-                                      <span>Marks: {question.marks || 0}</span>
-                                      {question.difficulty && <span>Difficulty: {question.difficulty}</span>}
-                                      {question.bloom_level && <span>Bloom: {question.bloom_level}</span>}
-                                    </div>
-                                    <div className="answer-display mt-3 p-2 bg-blue-50 border-l-4 border-blue-600 text-sm">
-                                      <strong>Sample Answer:</strong> {formatAnswer(question.sample_answer || question.answer)}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
-                          )}
-
-                          {/* Print view without checkbox */}
-                          {filterBySelection && (
-                            <div className="mb-4">
-                              <div className="font-semibold text-black mb-2">
-                                Q{idx + 1}. {question.question}
-                              </div>
-                              <div className="text-xs text-gray-600 mb-2">Marks: {question.marks || 0}</div>
-                              <div className="answer-space"></div>
-                              <div className="answer-display mt-2 pt-2 border-t border-gray-300">
-                                <strong className="text-sm">Sample Answer:</strong> {formatAnswer(question.sample_answer || question.answer)}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
         )}
       </div>
@@ -402,148 +485,104 @@ export default function ExamDetail() {
   return (
     <div className="min-h-screen bg-[var(--background)] flex flex-col">
       {/* Header */}
-      <header className="no-print bg-[var(--primary)] text-white h-18 px-12 flex items-center justify-between">
+      <header className="no-print bg-[var(--primary)] text-white px-12 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <BookOpen size={28} />
+          <BookOpen size={26} />
           <div>
-            <span className="text-xl font-semibold">Exam Details</span>
+            <span className="text-lg font-semibold">Exam Details</span>
             {exam && (
-              <p className="text-xs text-white/70">
-                {exam.subject} • Grade {exam.grade}
-              </p>
+              <p className="text-xs text-white/70">{exam.subject} • Grade {exam.grade}</p>
             )}
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <User size={32} />
-          <span className="text-sm font-medium">
-            {user?.firstName} {user?.lastName}
-          </span>
-          <button
-            onClick={logout}
-            className="ml-4 px-4 py-2 text-sm bg-white/10 hover:bg-white/20 rounded-md transition-colors"
-          >
+          <User size={28} />
+          <span className="text-sm font-medium">{user?.firstName} {user?.lastName}</span>
+          <button onClick={logout} className="ml-4 px-4 py-2 text-sm bg-white/10 hover:bg-white/20 rounded-md transition-colors">
             Logout
           </button>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 p-12">
-        <div className="max-w-6xl mx-auto">
-          {/* Back Button */}
+      <main className="flex-1 p-8">
+        <div className="max-w-5xl mx-auto">
+          {/* Back */}
           <button
             onClick={() => navigate('/exam-history')}
-            className="mb-6 flex items-center gap-2 px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--background-light)] rounded-lg transition-colors"
+            className="mb-4 flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--text-primary)] hover:bg-[var(--background-light)] rounded-lg transition-colors"
           >
-            <ArrowLeft size={18} />
+            <ArrowLeft size={16} />
             Back to Exam History
           </button>
 
-          {/* Error State */}
+          {/* Error */}
           {error && !loading && (
-            <div className="bg-[var(--surface)] rounded-2xl shadow-lg p-8">
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
-                  <span className="text-3xl">⚠️</span>
-                </div>
-                <h3 className="text-xl font-semibold text-[var(--text-primary)] mb-2">Failed to Load Exam</h3>
-                <p className="text-[var(--text-secondary)] mb-6 max-w-md">{error}</p>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => window.location.reload()}
-                    className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg hover:bg-[var(--primary-dark)] transition-colors"
-                  >
-                    Retry
-                  </button>
-                  <button
-                    onClick={() => navigate('/exam-history')}
-                    className="px-4 py-2 bg-[var(--background-light)] text-[var(--text-primary)] rounded-lg hover:bg-[var(--border-light)] transition-colors"
-                  >
-                    Back to History
-                  </button>
-                </div>
-                {error.includes('401') || error.includes('Unauthorized') || error.includes('token') ? (
-                  <p className="mt-4 text-sm text-[var(--text-muted)]">
-                    💡 Your session may have expired. Try <button onClick={logout} className="underline text-[var(--primary)]">logging out</button> and logging back in.
-                  </p>
-                ) : null}
+            <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+              <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <span className="text-2xl">⚠️</span>
+              </div>
+              <h3 className="text-xl font-semibold text-[var(--text-primary)] mb-2">Failed to Load Exam</h3>
+              <p className="text-[var(--text-secondary)] mb-5">{error}</p>
+              <div className="flex gap-3 justify-center">
+                <button onClick={() => window.location.reload()} className="px-4 py-2 bg-[var(--primary)] text-white rounded-lg">Retry</button>
+                <button onClick={() => navigate('/exam-history')} className="px-4 py-2 bg-[var(--background-light)] rounded-lg">Back to History</button>
               </div>
             </div>
           )}
 
-          {/* Loading State */}
+          {/* Loading */}
           {loading && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
-              <Sparkles size={64} className="text-[var(--primary)] mb-6 animate-pulse" />
+              <Sparkles size={56} className="text-[var(--primary)] mb-4 animate-pulse" />
               <p className="text-lg font-semibold text-[var(--text-primary)]">Loading exam details...</p>
             </div>
           )}
 
           {/* Exam Details */}
           {!loading && exam && (
-            <div className="bg-[var(--surface)] rounded-2xl shadow-lg p-8 space-y-6">
+            <div className="bg-[var(--surface)] rounded-2xl shadow-lg overflow-hidden">
               {/* Info Header */}
-              <div className="border-b border-[var(--border-light)] pb-6">
-                <h2 className="text-2xl font-bold text-[var(--text-primary)] mb-4">
+              <div className="p-6 border-b border-[var(--border-light)]">
+                <h2 className="text-xl font-bold text-[var(--text-primary)] mb-4">
                   {exam.subject} • Grade {exam.grade}
                 </h2>
-
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="bg-[var(--background-light)] rounded-lg p-4">
-                    <p className="text-xs text-[var(--text-muted)] mb-1">Total Questions</p>
-                    <p className="text-2xl font-bold text-[var(--primary)]">{exam.total_questions}</p>
-                  </div>
-                  <div className="bg-[var(--background-light)] rounded-lg p-4">
-                    <p className="text-xs text-[var(--text-muted)] mb-1">Total Marks</p>
-                    <p className="text-2xl font-bold text-[var(--primary)]">{exam.total_marks}</p>
-                  </div>
-                  <div className="bg-[var(--background-light)] rounded-lg p-4">
-                    <p className="text-xs text-[var(--text-muted)] mb-1">Objective</p>
-                    <p className="text-2xl font-bold text-blue-600">{exam.objective_questions_count}</p>
-                  </div>
-                  <div className="bg-[var(--background-light)] rounded-lg p-4">
-                    <p className="text-xs text-[var(--text-muted)] mb-1">Subjective</p>
-                    <p className="text-2xl font-bold text-purple-600">{exam.subjective_questions_count}</p>
-                  </div>
+                <div className="grid grid-cols-4 gap-3">
+                  {[
+                    { label: 'Total Questions', value: exam.total_questions, color: 'text-[var(--primary)]' },
+                    { label: 'Total Marks', value: exam.total_marks, color: 'text-[var(--primary)]' },
+                    { label: 'Objective', value: exam.objective_questions_count, color: 'text-blue-600' },
+                    { label: 'Subjective', value: exam.subjective_questions_count, color: 'text-purple-600' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="bg-[var(--background-light)] rounded-lg p-3">
+                      <p className="text-xs text-[var(--text-muted)] mb-0.5">{label}</p>
+                      <p className={`text-2xl font-bold ${color}`}>{value}</p>
+                    </div>
+                  ))}
                 </div>
-
-                <div className="mt-4 grid grid-cols-3 gap-4 text-sm">
-                  <div>
-                    <span className="text-[var(--text-muted)]">Created:</span>
-                    <p className="font-medium text-[var(--text-primary)]">
-                      {new Date(exam.created_at).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </p>
-                  </div>
-                  {exam.course_page_range && (
-                    <div>
-                      <span className="text-[var(--text-muted)]">Course Pages:</span>
-                      <p className="font-medium text-[var(--text-primary)]">{exam.course_page_range}</p>
-                    </div>
-                  )}
-                  {exam.activity_page_range && (
-                    <div>
-                      <span className="text-[var(--text-muted)]">Activity Pages:</span>
-                      <p className="font-medium text-[var(--text-primary)]">{exam.activity_page_range}</p>
-                    </div>
-                  )}
+                <div className="mt-3 flex gap-6 text-sm text-[var(--text-muted)]">
+                  <span>Created: {new Date(exam.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                  {exam.course_page_range && <span>Course Pages: {exam.course_page_range}</span>}
+                  {exam.activity_page_range && <span>Activity Pages: {exam.activity_page_range}</span>}
                 </div>
               </div>
 
-              {/* Questions Display */}
-              <div>
-                <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-4">Questions</h3>
-                {renderQuestionsSection(false)}
+              {/* Picture Description Note */}
+              {((exam.exam_content?.subjective?.picture_description as any[] | undefined) ?? []).length > 0 && (
+                <div className="mx-6 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 text-sm text-amber-800">
+                  <Image size={16} />
+                  <span>Upload images for Picture Description questions using the upload button next to each question.</span>
+                </div>
+              )}
+
+              {/* Questions */}
+              <div className="p-6">
+                <h3 className="text-base font-semibold text-[var(--text-primary)] mb-4">Questions</h3>
+                {renderQuestionsSection()}
               </div>
 
-              {/* Selection Toolbar */}
-              <div className="sticky bottom-0 bg-[var(--surface)] border-t border-[var(--border)] pt-4 flex items-center justify-between">
+              {/* Download Toolbar */}
+              <div className="sticky bottom-0 bg-[var(--surface)] border-t border-[var(--border)] px-6 py-3 flex items-center justify-between">
                 <div className="text-sm text-[var(--text-secondary)]">
                   <span className="font-semibold text-[var(--text-primary)]">{selectedQuestions.size}</span> of{' '}
                   <span className="font-semibold text-[var(--text-primary)]">{exam.total_questions}</span> questions selected •
@@ -555,15 +594,9 @@ export default function ExamDetail() {
                   className="px-4 py-2 bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {downloading ? (
-                    <>
-                      <Sparkles size={16} className="animate-spin" />
-                      Generating PDF...
-                    </>
+                    <><Sparkles size={15} className="animate-spin" />Generating PDF...</>
                   ) : (
-                    <>
-                      <Download size={16} />
-                      Download PDF
-                    </>
+                    <><Download size={15} />Download PDF</>
                   )}
                 </button>
               </div>

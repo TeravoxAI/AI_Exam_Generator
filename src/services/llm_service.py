@@ -75,7 +75,9 @@ class LLMService:
             logger.debug("🔐 Preparing API request...")
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://exam-generator.app",
+                "X-Title": "Exam-Gen"
             }
 
             payload = {

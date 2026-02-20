@@ -167,18 +167,13 @@ export function QuestionRenderer({
   const renderFillInBlanks = () => (
     <>
       {isEditing ? (
-        <textarea
-          value={editedQuestion.question}
-          onChange={(e) => onUpdateField('question', e.target.value)}
-          className="w-full p-2 text-sm border border-[var(--border)] rounded-lg mb-3 min-h-[60px] resize-y"
-        />
-      ) : (
-        <p className="text-sm text-[var(--text-primary)] mb-3">{question.question}</p>
-      )}
-      <div className="answer-space"></div>
-      <div className="answer-display mt-3 pt-3 border-t border-[var(--border-light)]">
-        {isEditing ? (
-          <div className="flex items-center gap-2">
+        <>
+          <textarea
+            value={editedQuestion.question}
+            onChange={(e) => onUpdateField('question', e.target.value)}
+            className="w-full p-2 text-sm border border-[var(--border)] rounded-lg mb-2 min-h-[60px] resize-y"
+          />
+          <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-medium text-[var(--text-muted)]">Answer:</span>
             <input
               type="text"
@@ -187,59 +182,104 @@ export function QuestionRenderer({
               className="flex-1 px-2 py-1 text-xs border border-[var(--border)] rounded"
             />
           </div>
-        ) : (
-          <div>
-            <span className="font-bold text-sm">Answer:</span> <span className="text-sm">{question.answer}</span>
-          </div>
-        )}
+        </>
+      ) : (
+        <p className="text-sm text-[var(--text-primary)] mb-2">{question.question}</p>
+      )}
+      {/* No separate answer line — student writes in the blank within the sentence */}
+      <div className="answer-display mt-3 pt-3 border-t border-[var(--border-light)]">
+        <div>
+          <span className="font-bold text-sm">Answer:</span> <span className="text-sm">{question.answer}</span>
+        </div>
       </div>
     </>
   )
 
-  const renderMatchColumns = () => (
-    <>
-      {question.instruction && (
-        <p className="text-sm italic text-[var(--text-secondary)] mb-3">{question.instruction}</p>
-      )}
-      <div className="grid grid-cols-2 gap-4 mb-3">
-        <div>
-          <p className="text-xs font-medium text-[var(--text-muted)] mb-2">Column A</p>
-          <div className="space-y-1">
-            {question.column_a?.map((item: string, idx: number) => (
-              <div key={idx} className="text-sm text-[var(--text-primary)]">
-                {idx + 1}. {item}
-              </div>
-            ))}
+  const renderMatchColumns = () => {
+    const colA: string[] = isEditing ? (editedQuestion.column_a || []) : (question.column_a || [])
+    const colB: string[] = isEditing ? (editedQuestion.column_b || []) : (question.column_b || [])
+    return (
+      <>
+        {isEditing ? (
+          <textarea
+            value={editedQuestion.instruction || ''}
+            onChange={(e) => onUpdateField('instruction', e.target.value)}
+            className="w-full p-2 text-sm border border-[var(--border)] rounded-lg mb-3 min-h-[40px] resize-y"
+            placeholder="Instruction..."
+          />
+        ) : (
+          question.instruction && (
+            <p className="text-sm italic text-[var(--text-secondary)] mb-3">{question.instruction}</p>
+          )
+        )}
+        <div className="grid grid-cols-2 gap-4 mb-3">
+          <div>
+            <p className="text-xs font-medium text-[var(--text-muted)] mb-2">Column A</p>
+            <div className="space-y-1">
+              {colA.map((item: string, idx: number) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <span className="text-sm text-[var(--text-secondary)] min-w-[20px]">{idx + 1}.</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={item}
+                      onChange={(e) => {
+                        const newArr = [...colA]
+                        newArr[idx] = e.target.value
+                        onUpdateField('column_a', newArr)
+                      }}
+                      className="flex-1 px-2 py-0.5 text-sm border border-[var(--border)] rounded"
+                    />
+                  ) : (
+                    <span className="text-sm text-[var(--text-primary)]">{item}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-[var(--text-muted)] mb-2">Column B</p>
+            <div className="space-y-1">
+              {colB.map((item: string, idx: number) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <span className="text-sm text-[var(--text-secondary)] min-w-[20px]">{String.fromCharCode(65 + idx)}.</span>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={item}
+                      onChange={(e) => {
+                        const newArr = [...colB]
+                        newArr[idx] = e.target.value
+                        onUpdateField('column_b', newArr)
+                      }}
+                      className="flex-1 px-2 py-0.5 text-sm border border-[var(--border)] rounded"
+                    />
+                  ) : (
+                    <span className="text-sm text-[var(--text-primary)]">{item}</span>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-        <div>
-          <p className="text-xs font-medium text-[var(--text-muted)] mb-2">Column B</p>
-          <div className="space-y-1">
-            {question.column_b?.map((item: string, idx: number) => (
-              <div key={idx} className="text-sm text-[var(--text-primary)]">
-                {String.fromCharCode(65 + idx)}. {item}
-              </div>
-            ))}
+        <div className="answer-space"></div>
+        {question.answer && (
+          <div className="answer-display mt-3 pt-3 border-t border-[var(--border-light)]">
+            <div className="mb-2">
+              <span className="font-bold text-sm">Answer:</span>
+            </div>
+            <div className="space-y-1">
+              {Object.entries(question.answer).map(([key, value]: [string, any], idx: number) => (
+                <div key={idx} className="text-sm text-[var(--text-secondary)]">
+                  {key} → {value}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      </div>
-      <div className="answer-space"></div>
-      {question.answer && (
-        <div className="answer-display mt-3 pt-3 border-t border-[var(--border-light)]">
-          <div className="mb-2">
-            <span className="font-bold text-sm">Answer:</span>
-          </div>
-          <div className="space-y-1">
-            {Object.entries(question.answer).map(([key, value]: [string, any], idx: number) => (
-              <div key={idx} className="text-sm text-[var(--text-secondary)]">
-                {key} → {value}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </>
-  )
+        )}
+      </>
+    )
+  }
 
   const renderRearrangeSentences = () => (
     <>
@@ -418,14 +458,33 @@ export function QuestionRenderer({
 
   const renderCreativeWriting = () => (
     <>
-      {question.instruction && (
-        <p className="text-sm italic text-[var(--text-secondary)] mb-3">{question.instruction}</p>
+      {isEditing ? (
+        <textarea
+          value={editedQuestion.instruction || ''}
+          onChange={(e) => onUpdateField('instruction', e.target.value)}
+          className="w-full p-2 text-sm border border-[var(--border)] rounded-lg mb-2 min-h-[40px] resize-y"
+          placeholder="Instruction (e.g. Write a short story on...)..."
+        />
+      ) : (
+        question.instruction && (
+          <p className="text-sm italic text-[var(--text-secondary)] mb-2">{question.instruction}</p>
+        )
       )}
-      {question.prompt && (
-        <div className="p-3 bg-[var(--background-light)] rounded-lg mb-3">
-          <p className="text-sm font-medium text-[var(--text-primary)]">{question.prompt}</p>
-        </div>
-      )}
+      <div className="mb-3">
+        <p className="text-xs font-medium text-[var(--text-muted)] mb-1">Topic / Prompt:</p>
+        {isEditing ? (
+          <textarea
+            value={editedQuestion.prompt || ''}
+            onChange={(e) => onUpdateField('prompt', e.target.value)}
+            className="w-full p-2 text-sm border border-[var(--border)] rounded-lg min-h-[50px] resize-y"
+            placeholder="Enter the creative writing topic or prompt..."
+          />
+        ) : (
+          <div className="p-3 bg-[var(--background-light)] rounded-lg border border-[var(--border)]">
+            <p className="text-sm font-medium text-[var(--text-primary)]">{question.prompt || '—'}</p>
+          </div>
+        )}
+      </div>
       <div className="answer-space bg-[var(--background-light)] border border-[var(--border)] rounded-lg p-3 min-h-[80px]">
       </div>
       {question.answer && (
