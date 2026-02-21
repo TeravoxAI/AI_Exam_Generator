@@ -89,11 +89,8 @@ src/
 ## 🛠️ Technology Stack
 
 - **Framework:** FastAPI
-<<<<<<< HEAD
-- **LLM:** OpenAI GPT-5.1 
-=======
 - **LLM:** OpenAI GPT-5.1 (via OpenRouter)
->>>>>>> feat/maths
+- **Frontend:** React + TypeScript + Tailwind CSS
 - **Database:** Supabase (PostgreSQL)
 - **Validation:** Pydantic
 - **Server:** Uvicorn
