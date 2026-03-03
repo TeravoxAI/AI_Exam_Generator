@@ -28,11 +28,14 @@ const TYPE_LABELS: Record<string, string> = {
   label_figures: 'Label the Figures',
   practice_questions_by_topic: 'Practice Questions',
   real_life_story_problems: 'Real-Life Story Problems',
+  grammar_correction: 'Grammar Correction',
+  parts_of_speech: 'Parts of Speech',
 }
 
 export default function ExamGenerator() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const [schoolName, setSchoolName] = useState('')
   const [formData, setFormData] = useState({
     grade: '',
     subject: '',
@@ -51,6 +54,7 @@ export default function ExamGenerator() {
   const [editedQuestions, setEditedQuestions] = useState<Record<string, any>>({})
   const [downloading, setDownloading] = useState(false)
   const [questionImages, setQuestionImages] = useState<Record<string, string>>({})
+  const [totalMarksOverride, setTotalMarksOverride] = useState<string>('')
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -214,7 +218,8 @@ export default function ExamGenerator() {
         created_at: new Date().toISOString()
       }
       const filename = `${formData.subject}_Grade${formData.grade}_Exam_${new Date().toISOString().split('T')[0]}.pdf`
-      await generateExamPDF(examData, selectedQuestions, { filename, includeAnswerKey: true }, questionImages)
+      const totalMarksVal = totalMarksOverride !== '' && !isNaN(parseInt(totalMarksOverride)) ? parseInt(totalMarksOverride) : undefined
+      await generateExamPDF(examData, selectedQuestions, { filename, includeAnswerKey: true, schoolName, totalMarksOverride: totalMarksVal }, questionImages)
     } catch (error) {
       setError('Failed to download PDF. Please try again.')
     } finally {
@@ -259,23 +264,33 @@ export default function ExamGenerator() {
     setSelectedQuestions(new Set())
   }
 
-  const getTotalMarks = () => {
+  const getCalculatedMarks = () => {
     if (!examResult?.exam) return 0
     let total = 0
 
     selectedQuestions.forEach(id => {
-      const [category, type, index] = id.split('-')
+      const parts = id.split('-')
+      const category = parts[0]
+      const type = parts.slice(1, -1).join('-')
+      const index = parseInt(parts[parts.length - 1])
       const questions = category === 'obj'
         ? examResult?.exam?.objective?.[type]
         : examResult?.exam?.subjective?.[type]
 
       const questionArray = Array.isArray(questions) ? questions : []
-      if (questionArray && questionArray[parseInt(index)]) {
-        total += questionArray[parseInt(index)].marks || 0
+      if (questionArray && questionArray[index]) {
+        total += questionArray[index].marks || 0
       }
     })
 
     return total
+  }
+
+  const getTotalMarks = () => {
+    if (totalMarksOverride !== '' && !isNaN(parseInt(totalMarksOverride))) {
+      return parseInt(totalMarksOverride)
+    }
+    return getCalculatedMarks()
   }
 
   const getQuestionTypeLabel = (typeId: string) => {
@@ -349,7 +364,7 @@ export default function ExamGenerator() {
         onCancelEditing={cancelEditingQuestion}
         onUpdateField={(field, value) => updateEditedQuestion(questionId, field, value)}
         questionImage={questionImages[questionId]}
-        onImageUpload={typeId === 'picture_description' ? (file) => handleImageUpload(questionId, file) : undefined}
+        onImageUpload={['picture_description', 'label_figures', 'practice_questions_by_topic', 'real_life_story_problems'].includes(typeId) ? (file) => handleImageUpload(questionId, file) : undefined}
       />
     )
   }
@@ -503,6 +518,20 @@ export default function ExamGenerator() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* School Name */}
+            <div>
+              <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
+                School Name
+              </label>
+              <input
+                type="text"
+                value={schoolName}
+                onChange={(e) => setSchoolName(e.target.value)}
+                placeholder="e.g., Army Public School (APS)"
+                className="w-full h-11 px-4 bg-[var(--background-light)] border border-[var(--border)] rounded-[var(--radius-md)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
+              />
+            </div>
+
             {/* Grade Level */}
             <div>
               <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
@@ -797,15 +826,30 @@ export default function ExamGenerator() {
               </div>
               {/* Selection Toolbar */}
               <div className="no-print sticky bottom-0 bg-[var(--surface)] border-t border-[var(--border)] pt-4 flex items-center justify-between">
-                <div className="text-sm text-[var(--text-secondary)]">
-                  <span className="font-semibold text-[var(--text-primary)]">{selectedQuestions.size}</span> of{' '}
-                  <span className="font-semibold text-[var(--text-primary)]">
-                    {Object.values(examResult.exam.objective || {}).reduce((sum, questions) =>
-                      sum + (Array.isArray(questions) ? questions.length : 0), 0) +
-                     Object.values(examResult.exam.subjective || {}).reduce((sum, questions) =>
-                      sum + (Array.isArray(questions) ? questions.length : 0), 0)}
-                  </span>{' '}
-                  questions selected • Total: <span className="font-semibold text-[var(--text-primary)]">{getTotalMarks()}</span> marks
+                <div className="flex items-center gap-3 text-sm text-[var(--text-secondary)]">
+                  <span>
+                    <span className="font-semibold text-[var(--text-primary)]">{selectedQuestions.size}</span> of{' '}
+                    <span className="font-semibold text-[var(--text-primary)]">
+                      {Object.values(examResult.exam.objective || {}).reduce((sum, questions) =>
+                        sum + (Array.isArray(questions) ? questions.length : 0), 0) +
+                       Object.values(examResult.exam.subjective || {}).reduce((sum, questions) =>
+                        sum + (Array.isArray(questions) ? questions.length : 0), 0)}
+                    </span>{' '}
+                    questions selected
+                  </span>
+                  <span className="text-[var(--border)]">|</span>
+                  <div className="flex items-center gap-2">
+                    <span>Total Marks:</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={totalMarksOverride !== '' ? totalMarksOverride : getCalculatedMarks()}
+                      onChange={(e) => setTotalMarksOverride(e.target.value)}
+                      onBlur={(e) => { if (e.target.value === '' || e.target.value === String(getCalculatedMarks())) setTotalMarksOverride('') }}
+                      className="w-16 px-2 py-0.5 text-sm font-semibold text-[var(--text-primary)] border border-[var(--border)] rounded focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+                      title="Edit total marks for PDF"
+                    />
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <button

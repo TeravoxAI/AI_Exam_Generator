@@ -21,6 +21,8 @@ export default function ExamDetail() {
   const [error, setError] = useState('')
   const [selectedQuestions, setSelectedQuestions] = useState<Set<string>>(new Set())
   const [downloading, setDownloading] = useState(false)
+  const [schoolName, setSchoolName] = useState('')
+  const [totalMarksOverride, setTotalMarksOverride] = useState<string>('')
   // questionImages: maps questionId -> base64 data URL for Picture Description
   const [questionImages, setQuestionImages] = useState<Record<string, string>>({})
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -105,7 +107,13 @@ export default function ExamDetail() {
     setDownloading(true)
     try {
       const filename = `${exam.subject}_Grade${exam.grade}_Exam_${new Date().toISOString().split('T')[0]}.pdf`
-      await generateExamPDF(exam, selectedQuestions, { filename, includeAnswerKey: true }, questionImages)
+      const totalMarksVal = totalMarksOverride.trim() ? parseFloat(totalMarksOverride) : undefined
+      await generateExamPDF(
+        exam,
+        selectedQuestions,
+        { filename, includeAnswerKey: true, schoolName: schoolName.trim() || undefined, totalMarksOverride: totalMarksVal },
+        questionImages
+      )
     } catch (error) {
       setError('Failed to download PDF. Please try again.')
     } finally {
@@ -582,23 +590,48 @@ export default function ExamDetail() {
               </div>
 
               {/* Download Toolbar */}
-              <div className="sticky bottom-0 bg-[var(--surface)] border-t border-[var(--border)] px-6 py-3 flex items-center justify-between">
-                <div className="text-sm text-[var(--text-secondary)]">
-                  <span className="font-semibold text-[var(--text-primary)]">{selectedQuestions.size}</span> of{' '}
-                  <span className="font-semibold text-[var(--text-primary)]">{exam.total_questions}</span> questions selected •
-                  Total: <span className="font-semibold text-[var(--text-primary)]">{getTotalMarks()}</span> marks
+              <div className="sticky bottom-0 bg-[var(--surface)] border-t border-[var(--border)] px-6 py-4 space-y-3">
+                {/* PDF options row */}
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    placeholder="School name (optional)"
+                    value={schoolName}
+                    onChange={(e) => setSchoolName(e.target.value)}
+                    className="flex-1 px-3 py-1.5 text-sm border border-[var(--border)] rounded-lg bg-[var(--background-light)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">Total Marks:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      placeholder={String(getTotalMarks())}
+                      value={totalMarksOverride}
+                      onChange={(e) => setTotalMarksOverride(e.target.value)}
+                      className="w-20 px-2 py-1.5 text-sm border border-[var(--border)] rounded-lg bg-[var(--background-light)] text-center focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+                    />
+                  </div>
                 </div>
-                <button
-                  onClick={downloadExam}
-                  disabled={selectedQuestions.size === 0 || downloading}
-                  className="px-4 py-2 bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {downloading ? (
-                    <><Sparkles size={15} className="animate-spin" />Generating PDF...</>
-                  ) : (
-                    <><Download size={15} />Download PDF</>
-                  )}
-                </button>
+                {/* Actions row */}
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-[var(--text-secondary)]">
+                    <span className="font-semibold text-[var(--text-primary)]">{selectedQuestions.size}</span> of{' '}
+                    <span className="font-semibold text-[var(--text-primary)]">{exam.total_questions}</span> questions selected •
+                    Total: <span className="font-semibold text-[var(--text-primary)]">{totalMarksOverride.trim() ? totalMarksOverride : getTotalMarks()}</span> marks
+                  </div>
+                  <button
+                    onClick={downloadExam}
+                    disabled={selectedQuestions.size === 0 || downloading}
+                    className="px-4 py-2 bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {downloading ? (
+                      <><Sparkles size={15} className="animate-spin" />Generating PDF...</>
+                    ) : (
+                      <><Download size={15} />Download PDF</>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           )}

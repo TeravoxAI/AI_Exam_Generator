@@ -1,5 +1,32 @@
 import { Edit2, Save, X, Upload } from 'lucide-react'
-import { useRef } from 'react'
+import { useRef, useCallback } from 'react'
+
+// Mathematical / shape symbols palette (shown in edit mode)
+const MATH_SYMBOLS = [
+  '+', '−', '×', '÷', '=', '≠', '<', '>', '≤', '≥',
+  '²', '³', '√', 'π', '∞', '°', '½', '¼', '¾',
+  '□', '△', '○', '▷', '♦', '%', '∑', '∠', '⊥', '∥',
+]
+
+function SymbolPalette({ onInsert }: { onInsert: (sym: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1 p-2 bg-[var(--background-light)] border border-[var(--border)] rounded-lg mb-2">
+      <span className="text-xs text-[var(--text-muted)] w-full mb-1">Symbols &amp; Shapes:</span>
+      {MATH_SYMBOLS.map((sym) => (
+        <button
+          key={sym}
+          type="button"
+          // onMouseDown + preventDefault keeps the textarea focused/selection intact
+          onMouseDown={(e) => { e.preventDefault(); onInsert(sym) }}
+          className="w-7 h-7 flex items-center justify-center text-sm border border-[var(--border)] rounded hover:bg-[var(--primary)] hover:text-white transition-colors font-mono cursor-pointer"
+          title={`Insert ${sym}`}
+        >
+          {sym}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 // Roman numeral helper for sub-part labels
 const toRoman = (n: number): string => {
@@ -26,6 +53,13 @@ interface QuestionProps {
   onImageUpload?: (file: File) => void
 }
 
+// Math question types that benefit from symbol palette + image upload
+const MATH_IMAGE_TYPES = ['label_figures', 'drawing_exercise']
+const MATH_SYMBOL_TYPES = [
+  'fill_in_blanks_from_word_bank', 'short_practice_questions_missing_solution',
+  'label_figures', 'practice_questions_by_topic', 'real_life_story_problems', 'drawing_exercise',
+]
+
 export function QuestionRenderer({
   question,
   index,
@@ -42,6 +76,27 @@ export function QuestionRenderer({
   onImageUpload,
 }: QuestionProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const activeTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+
+  const insertSymbol = useCallback((sym: string) => {
+    const ta = activeTextareaRef.current
+    if (!ta) return
+    const start = ta.selectionStart ?? ta.value.length
+    const end = ta.selectionEnd ?? ta.value.length
+    const newVal = ta.value.slice(0, start) + sym + ta.value.slice(end)
+    // Determine which field this textarea maps to by its data-field attribute
+    const field = ta.getAttribute('data-field') || 'question'
+    onUpdateField(field, newVal)
+    // Re-focus and set cursor after inserted symbol
+    requestAnimationFrame(() => {
+      ta.focus()
+      ta.setSelectionRange(start + sym.length, start + sym.length)
+    })
+  }, [onUpdateField])
+
+  const trackTextarea = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    activeTextareaRef.current = e.currentTarget
+  }
   // Render specific question type content
   const renderQuestionContent = () => {
     switch (typeId) {
@@ -79,9 +134,15 @@ export function QuestionRenderer({
       case 'label_figures':
         return renderLabelFigures()
       case 'practice_questions_by_topic':
-        return renderShortLongAnswer()
+        return renderPracticeQuestions()
       case 'real_life_story_problems':
         return renderRealLifeStoryProblems()
+      case 'drawing_exercise':
+        return renderDrawingExercise()
+      case 'grammar_correction':
+        return renderGrammarCorrection()
+      case 'parts_of_speech':
+        return renderPartsOfSpeech()
       default:
         return <div className="text-xs text-[var(--text-muted)]">Unknown question type: {typeId}</div>
     }
@@ -90,11 +151,16 @@ export function QuestionRenderer({
   const renderMCQ = () => (
     <>
       {isEditing ? (
-        <textarea
-          value={editedQuestion.question}
-          onChange={(e) => onUpdateField('question', e.target.value)}
-          className="w-full p-2 text-sm border border-[var(--border)] rounded-lg mb-3 min-h-[60px] resize-y"
-        />
+        <>
+          {MATH_SYMBOL_TYPES.includes(typeId) && <SymbolPalette onInsert={insertSymbol} />}
+          <textarea
+            data-field="question"
+            onFocus={trackTextarea}
+            value={editedQuestion.question}
+            onChange={(e) => onUpdateField('question', e.target.value)}
+            className="w-full p-2 text-sm border border-[var(--border)] rounded-lg mb-3 min-h-[60px] resize-y"
+          />
+        </>
       ) : (
         <p className="text-sm text-[var(--text-primary)] mb-3">{question.question}</p>
       )}
@@ -326,53 +392,160 @@ export function QuestionRenderer({
     </>
   )
 
-  const renderComprehensionObjective = () => (
-    <>
-      {question.instruction && (
-        <p className="text-sm italic text-[var(--text-secondary)] mb-3">{question.instruction}</p>
-      )}
-      <div className="p-3 bg-[var(--background-light)] rounded-lg mb-3">
-        <p className="text-sm text-[var(--text-primary)] leading-relaxed">{question.passage}</p>
-      </div>
-      <div className="space-y-3">
-        {question.sub_questions?.map((subQ: any, idx: number) => (
-          <div key={idx} className="pl-4 border-l-2 border-[var(--border)]">
-            <p className="text-xs font-medium text-[var(--text-muted)] mb-1">{idx + 1}. ({subQ.marks} marks)</p>
-            {subQ.question && <p className="text-sm text-[var(--text-primary)]">{subQ.question}</p>}
-            {subQ.statement && <p className="text-sm text-[var(--text-primary)]">{subQ.statement}</p>}
-            {subQ.options && (
-              <div className="mt-1 ml-3 space-y-1">
-                {subQ.options.map((opt: string, optIdx: number) => (
-                  <div key={optIdx} className="text-xs text-[var(--text-secondary)]">
-                    {String.fromCharCode(65 + optIdx)}. {opt}
+  const renderComprehensionObjective = () => {
+    const q = isEditing ? editedQuestion : question
+    const updateSubQ = (idx: number, field: string, val: any) => {
+      const newSubs = [...(editedQuestion.sub_questions || [])]
+      newSubs[idx] = { ...newSubs[idx], [field]: val }
+      onUpdateField('sub_questions', newSubs)
+    }
+    const updateSubQOption = (subIdx: number, optIdx: number, val: string) => {
+      const newSubs = [...(editedQuestion.sub_questions || [])]
+      const newOpts = [...(newSubs[subIdx].options || [])]
+      newOpts[optIdx] = val
+      newSubs[subIdx] = { ...newSubs[subIdx], options: newOpts }
+      onUpdateField('sub_questions', newSubs)
+    }
+    return (
+      <>
+        {isEditing ? (
+          <>
+            <div className="mb-2">
+              <label className="text-xs font-medium text-[var(--text-muted)] block mb-1">Instruction:</label>
+              <textarea
+                data-field="instruction"
+                onFocus={trackTextarea}
+                value={q.instruction || ''}
+                onChange={(e) => onUpdateField('instruction', e.target.value)}
+                className="w-full p-2 text-sm border border-[var(--border)] rounded-lg min-h-[40px] resize-y"
+                placeholder="Instruction..."
+              />
+            </div>
+            <div className="mb-3">
+              <label className="text-xs font-medium text-[var(--text-muted)] block mb-1">Passage:</label>
+              <textarea
+                data-field="passage"
+                onFocus={trackTextarea}
+                value={q.passage || ''}
+                onChange={(e) => onUpdateField('passage', e.target.value)}
+                className="w-full p-2 text-sm border border-[var(--border)] rounded-lg min-h-[80px] resize-y"
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            {q.instruction && <p className="text-sm italic text-[var(--text-secondary)] mb-3">{q.instruction}</p>}
+            <div className="p-3 bg-[var(--background-light)] rounded-lg mb-3">
+              <p className="text-sm text-[var(--text-primary)] leading-relaxed">{q.passage}</p>
+            </div>
+          </>
+        )}
+        <div className="space-y-3">
+          {(q.sub_questions || []).map((subQ: any, idx: number) => (
+            <div key={idx} className="pl-4 border-l-2 border-[var(--border)]">
+              <p className="text-xs font-medium text-[var(--text-muted)] mb-1">{idx + 1}. ({subQ.marks} marks)</p>
+              {isEditing ? (
+                <>
+                  <textarea
+                    value={subQ.question || subQ.statement || ''}
+                    onChange={(e) => updateSubQ(idx, subQ.question !== undefined ? 'question' : 'statement', e.target.value)}
+                    className="w-full p-1.5 text-sm border border-[var(--border)] rounded mb-2 min-h-[40px] resize-y"
+                    placeholder="Sub-question..."
+                  />
+                  {subQ.options && (
+                    <div className="ml-2 space-y-1 mb-2">
+                      {subQ.options.map((opt: string, oi: number) => (
+                        <div key={oi} className="flex items-center gap-2">
+                          <span className="text-xs text-[var(--text-muted)] min-w-[16px]">{String.fromCharCode(65 + oi)}.</span>
+                          <input
+                            type="text"
+                            value={opt}
+                            onChange={(e) => updateSubQOption(idx, oi, e.target.value)}
+                            className="flex-1 px-2 py-0.5 text-xs border border-[var(--border)] rounded"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-[var(--text-muted)]">Answer:</span>
+                    <input
+                      type="text"
+                      value={typeof subQ.answer === 'boolean' ? String(subQ.answer) : (subQ.answer || '')}
+                      onChange={(e) => updateSubQ(idx, 'answer', e.target.value)}
+                      className="flex-1 px-2 py-0.5 text-xs border border-[var(--border)] rounded"
+                    />
                   </div>
-                ))}
-              </div>
-            )}
-            <div className="answer-space"></div>
-            {subQ.answer && (
-              <div className="answer-display mt-2">
-                <div>
-                  <span className="font-bold text-sm">Answer:</span> <span className="text-sm">{typeof subQ.answer === 'boolean' ? (subQ.answer ? 'True' : 'False') : subQ.answer}</span>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </>
-  )
+                </>
+              ) : (
+                <>
+                  {subQ.question && <p className="text-sm text-[var(--text-primary)]">{subQ.question}</p>}
+                  {subQ.statement && <p className="text-sm text-[var(--text-primary)]">{subQ.statement}</p>}
+                  {subQ.options && (
+                    <div className="mt-1 ml-3 space-y-1">
+                      {subQ.options.map((opt: string, optIdx: number) => (
+                        <div key={optIdx} className="text-xs text-[var(--text-secondary)]">
+                          {String.fromCharCode(65 + optIdx)}. {opt}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="answer-space"></div>
+                  {subQ.answer !== undefined && (
+                    <div className="answer-display mt-2">
+                      <span className="font-bold text-sm">Answer:</span>{' '}
+                      <span className="text-sm">{typeof subQ.answer === 'boolean' ? (subQ.answer ? 'True' : 'False') : subQ.answer}</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </>
+    )
+  }
 
   const renderShortLongAnswer = () => (
     <>
       {isEditing ? (
-        <textarea
-          value={editedQuestion.question}
-          onChange={(e) => onUpdateField('question', e.target.value)}
-          className="w-full p-2 text-sm border border-[var(--border)] rounded-lg mb-3 min-h-[60px] resize-y"
-        />
+        <>
+          {MATH_SYMBOL_TYPES.includes(typeId) && <SymbolPalette onInsert={insertSymbol} />}
+          <textarea
+            data-field="question"
+            onFocus={trackTextarea}
+            value={editedQuestion.question}
+            onChange={(e) => onUpdateField('question', e.target.value)}
+            className="w-full p-2 text-sm border border-[var(--border)] rounded-lg mb-3 min-h-[60px] resize-y"
+          />
+        </>
       ) : (
         <p className="text-sm text-[var(--text-primary)] mb-3">{question.question}</p>
+      )}
+      {/* Image upload for math types that need figures */}
+      {(MATH_IMAGE_TYPES.includes(typeId) && (questionImage || onImageUpload)) && (
+        <div className="mb-3">
+          {questionImage ? (
+            <div className="relative inline-block">
+              <img src={questionImage} alt="Question figure" className="max-w-full max-h-[200px] rounded-lg border border-[var(--border)] object-contain" />
+              <button onClick={() => onImageUpload && fileInputRef.current?.click()} className="no-print absolute bottom-2 right-2 px-2 py-1 bg-white/90 border border-[var(--border)] rounded text-xs text-[var(--text-secondary)] hover:bg-white transition-colors">Change</button>
+            </div>
+          ) : (
+            <div onClick={() => onImageUpload && fileInputRef.current?.click()} className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${onImageUpload ? 'border-[var(--border)] hover:border-[var(--primary)] hover:bg-blue-50 cursor-pointer' : 'border-[var(--border-light)] bg-[var(--background-light)]'}`}>
+              {onImageUpload ? (
+                <>
+                  <Upload size={18} className="mx-auto mb-1 text-[var(--text-muted)]" />
+                  <p className="text-xs font-medium text-[var(--text-primary)]">Click to upload figure / image</p>
+                </>
+              ) : (
+                <p className="text-xs text-[var(--text-muted)] italic">[Figure placeholder]</p>
+              )}
+            </div>
+          )}
+          {onImageUpload && (
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) onImageUpload(file) }} />
+          )}
+        </div>
       )}
       <div className="answer-space bg-[var(--background-light)] border border-[var(--border)] rounded-lg p-3 min-h-[60px]">
       </div>
@@ -499,6 +672,13 @@ export function QuestionRenderer({
           </div>
         )}
       </div>
+      {/* Vocabulary words */}
+      {question.vocabulary_words && question.vocabulary_words.length > 0 && (
+        <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+          <p className="text-xs font-semibold text-amber-700 mb-1">Word Bank:</p>
+          <p className="text-sm text-amber-800">{(question.vocabulary_words as string[]).join('  |  ')}</p>
+        </div>
+      )}
       <div className="answer-space bg-[var(--background-light)] border border-[var(--border)] rounded-lg p-3 min-h-[80px]">
       </div>
       {question.answer && (
@@ -587,45 +767,111 @@ export function QuestionRenderer({
     </>
   )
 
-  const renderComprehensionSubjective = () => (
-    <>
-      {question.instruction && (
-        <p className="text-sm italic text-[var(--text-secondary)] mb-3">{question.instruction}</p>
-      )}
-      <div className="p-3 bg-[var(--background-light)] rounded-lg mb-3">
-        <p className="text-sm text-[var(--text-primary)] leading-relaxed">{question.passage}</p>
-      </div>
-      <div className="space-y-3">
-        {question.sub_questions?.map((subQ: any, idx: number) => (
-          <div key={idx} className="pl-4 border-l-2 border-[var(--border)]">
-            <p className="text-xs font-medium text-[var(--text-muted)] mb-1">{idx + 1}. ({subQ.marks} marks)</p>
-            <p className="text-sm text-[var(--text-primary)] mb-2">{subQ.question}</p>
-            <div className="answer-space bg-[var(--background-light)] rounded p-2 min-h-[40px]">
-              <span className="text-xs text-[var(--text-muted)]">Answer space</span>
+  const renderComprehensionSubjective = () => {
+    const q = isEditing ? editedQuestion : question
+    const updateSubQ = (idx: number, field: string, val: any) => {
+      const newSubs = [...(editedQuestion.sub_questions || [])]
+      newSubs[idx] = { ...newSubs[idx], [field]: val }
+      onUpdateField('sub_questions', newSubs)
+    }
+    return (
+      <>
+        {isEditing ? (
+          <>
+            <div className="mb-2">
+              <label className="text-xs font-medium text-[var(--text-muted)] block mb-1">Instruction:</label>
+              <textarea
+                data-field="instruction"
+                onFocus={trackTextarea}
+                value={q.instruction || ''}
+                onChange={(e) => onUpdateField('instruction', e.target.value)}
+                className="w-full p-2 text-sm border border-[var(--border)] rounded-lg min-h-[40px] resize-y"
+                placeholder="Instruction..."
+              />
             </div>
-            {subQ.answer && (
-              <div className="answer-display mt-2 pt-2 border-t border-[var(--border-light)]">
-                <div className="mb-1">
-                  <span className="font-bold text-sm">Sample Answer:</span>
-                </div>
-                <p className="text-sm text-[var(--text-primary)]">{subQ.answer}</p>
+            <div className="mb-3">
+              <label className="text-xs font-medium text-[var(--text-muted)] block mb-1">Passage:</label>
+              <textarea
+                data-field="passage"
+                onFocus={trackTextarea}
+                value={q.passage || ''}
+                onChange={(e) => onUpdateField('passage', e.target.value)}
+                className="w-full p-2 text-sm border border-[var(--border)] rounded-lg min-h-[80px] resize-y"
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            {q.instruction && <p className="text-sm italic text-[var(--text-secondary)] mb-3">{q.instruction}</p>}
+            <div className="p-3 bg-[var(--background-light)] rounded-lg mb-3">
+              <p className="text-sm text-[var(--text-primary)] leading-relaxed">{q.passage}</p>
+            </div>
+          </>
+        )}
+        <div className="space-y-3">
+          {(q.sub_questions || []).map((subQ: any, idx: number) => (
+            <div key={idx} className="pl-4 border-l-2 border-[var(--border)]">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <p className="text-xs font-medium text-[var(--text-muted)]">{idx + 1}. ({subQ.marks} marks)</p>
+                {subQ.sentences_required && (
+                  <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">{subQ.sentences_required} sentence{subQ.sentences_required > 1 ? 's' : ''}</span>
+                )}
+                {subQ.word_limit && (
+                  <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">max {subQ.word_limit} words</span>
+                )}
               </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </>
-  )
+              {isEditing ? (
+                <>
+                  <textarea
+                    value={subQ.question || ''}
+                    onChange={(e) => updateSubQ(idx, 'question', e.target.value)}
+                    className="w-full p-1.5 text-sm border border-[var(--border)] rounded mb-2 min-h-[40px] resize-y"
+                    placeholder="Sub-question..."
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-[var(--text-muted)]">Sample Answer:</span>
+                    <textarea
+                      value={subQ.answer || ''}
+                      onChange={(e) => updateSubQ(idx, 'answer', e.target.value)}
+                      className="flex-1 px-2 py-1 text-xs border border-[var(--border)] rounded min-h-[40px] resize-y"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-[var(--text-primary)] mb-2">{subQ.question}</p>
+                  <div className="answer-space bg-[var(--background-light)] rounded p-2 min-h-[40px]">
+                    <span className="text-xs text-[var(--text-muted)]">Answer space</span>
+                  </div>
+                  {subQ.answer && (
+                    <div className="answer-display mt-2 pt-2 border-t border-[var(--border-light)]">
+                      <div className="mb-1"><span className="font-bold text-sm">Sample Answer:</span></div>
+                      <p className="text-sm text-[var(--text-primary)]">{subQ.answer}</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </>
+    )
+  }
 
   // Math question type renderers
   const renderFillInBlanksWordBank = () => (
     <>
       {isEditing ? (
-        <textarea
-          value={editedQuestion.blanks_sentence}
-          onChange={(e) => onUpdateField('blanks_sentence', e.target.value)}
-          className="w-full p-2 text-sm border border-[var(--border)] rounded-lg mb-3 min-h-[50px] resize-y"
-        />
+        <>
+          <SymbolPalette onInsert={insertSymbol} />
+          <textarea
+            data-field="blanks_sentence"
+            onFocus={trackTextarea}
+            value={editedQuestion.blanks_sentence}
+            onChange={(e) => onUpdateField('blanks_sentence', e.target.value)}
+            className="w-full p-2 text-sm border border-[var(--border)] rounded-lg mb-3 min-h-[50px] resize-y"
+          />
+        </>
       ) : (
         <p className="text-sm text-[var(--text-primary)] mb-3">{question.blanks_sentence}</p>
       )}
@@ -672,11 +918,16 @@ export function QuestionRenderer({
   const renderShortPracticeQuestions = () => (
     <>
       {isEditing ? (
-        <textarea
-          value={editedQuestion.question}
-          onChange={(e) => onUpdateField('question', e.target.value)}
-          className="w-full p-2 text-sm border border-[var(--border)] rounded-lg mb-3 min-h-[60px] resize-y"
-        />
+        <>
+          <SymbolPalette onInsert={insertSymbol} />
+          <textarea
+            data-field="question"
+            onFocus={trackTextarea}
+            value={editedQuestion.question}
+            onChange={(e) => onUpdateField('question', e.target.value)}
+            className="w-full p-2 text-sm border border-[var(--border)] rounded-lg mb-3 min-h-[60px] resize-y"
+          />
+        </>
       ) : (
         <p className="text-sm text-[var(--text-primary)] mb-3">{question.question}</p>
       )}
@@ -704,26 +955,135 @@ export function QuestionRenderer({
 
   const renderLabelFigures = () => (
     <>
-      {question.instruction && (
-        <p className="text-sm italic text-[var(--text-secondary)] mb-3">{question.instruction}</p>
+      {isEditing ? (
+        <>
+          <div className="mb-2">
+            <label className="text-xs font-medium text-[var(--text-muted)] block mb-1">Instruction:</label>
+            <textarea
+              data-field="instruction"
+              onFocus={trackTextarea}
+              value={editedQuestion.instruction || ''}
+              onChange={(e) => onUpdateField('instruction', e.target.value)}
+              className="w-full p-2 text-sm border border-[var(--border)] rounded-lg min-h-[40px] resize-y"
+            />
+          </div>
+          <div className="mb-2">
+            <label className="text-xs font-medium text-[var(--text-muted)] block mb-1">Figure Description:</label>
+            <textarea
+              data-field="figure_description"
+              onFocus={trackTextarea}
+              value={editedQuestion.figure_description || ''}
+              onChange={(e) => onUpdateField('figure_description', e.target.value)}
+              className="w-full p-2 text-sm border border-[var(--border)] rounded-lg min-h-[40px] resize-y"
+            />
+          </div>
+        </>
+      ) : (
+        <>
+          {question.instruction && <p className="text-sm italic text-[var(--text-secondary)] mb-3">{question.instruction}</p>}
+          {question.figure_description && (
+            <div className="p-3 bg-[var(--background-light)] rounded-lg mb-3 border border-[var(--border)]">
+              <p className="text-xs font-medium text-[var(--text-muted)] mb-2">Figure:</p>
+              <p className="text-sm text-[var(--text-primary)] italic leading-relaxed">{question.figure_description}</p>
+            </div>
+          )}
+        </>
       )}
-      {question.figure_description && (
-        <div className="p-3 bg-[var(--background-light)] rounded-lg mb-3 border border-[var(--border)]">
-          <p className="text-xs font-medium text-[var(--text-muted)] mb-2">Figure:</p>
-          <p className="text-sm text-[var(--text-primary)] italic leading-relaxed">{question.figure_description}</p>
-        </div>
-      )}
-      <div className="answer-space bg-[var(--background-light)] border border-[var(--border)] rounded-lg p-3 min-h-[80px] flex items-center justify-center">
+      {/* Image upload for figure */}
+      <div className="mb-3">
+        {questionImage ? (
+          <div className="relative inline-block">
+            <img src={questionImage} alt="Figure" className="max-w-full max-h-[200px] rounded-lg border border-[var(--border)] object-contain" />
+            <button onClick={() => onImageUpload && fileInputRef.current?.click()} className="no-print absolute bottom-2 right-2 px-2 py-1 bg-white/90 border border-[var(--border)] rounded text-xs hover:bg-white transition-colors">Change</button>
+          </div>
+        ) : (
+          <div onClick={() => onImageUpload && fileInputRef.current?.click()} className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${onImageUpload ? 'border-[var(--border)] hover:border-[var(--primary)] hover:bg-blue-50 cursor-pointer' : 'border-[var(--border-light)] bg-[var(--background-light)]'}`}>
+            {onImageUpload ? (
+              <>
+                <Upload size={18} className="mx-auto mb-1 text-[var(--text-muted)]" />
+                <p className="text-xs font-medium text-[var(--text-primary)]">Click to upload figure / diagram</p>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">JPG, PNG supported</p>
+              </>
+            ) : (
+              <p className="text-xs text-[var(--text-muted)] italic">[Figure placeholder]</p>
+            )}
+          </div>
+        )}
+        {onImageUpload && <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) onImageUpload(file) }} />}
+      </div>
+      <div className="answer-space bg-[var(--background-light)] border border-[var(--border)] rounded-lg p-3 min-h-[60px] flex items-center justify-center">
         <span className="text-xs text-[var(--text-muted)]">Label the figure</span>
       </div>
       {question.answer && (
         <div className="answer-display mt-3 pt-3 border-t border-[var(--border-light)]">
-          <div className="mb-2">
-            <span className="font-bold text-sm">Expected Labels:</span>
-          </div>
+          <div className="mb-2"><span className="font-bold text-sm">Expected Labels:</span></div>
           <div className="p-3 bg-[var(--background-light)] rounded-lg">
             <p className="text-sm text-[var(--text-primary)] leading-relaxed">{question.answer}</p>
           </div>
+        </div>
+      )}
+    </>
+  )
+
+  const renderPracticeQuestions = () => (
+    <>
+      {isEditing ? (
+        <>
+          {MATH_SYMBOL_TYPES.includes(typeId) && <SymbolPalette onInsert={insertSymbol} />}
+          <textarea
+            data-field="question"
+            onFocus={trackTextarea}
+            value={editedQuestion.question}
+            onChange={(e) => onUpdateField('question', e.target.value)}
+            className="w-full p-2 text-sm border border-[var(--border)] rounded-lg mb-3 min-h-[60px] resize-y"
+          />
+        </>
+      ) : (
+        <p className="text-sm text-[var(--text-primary)] mb-3">{question.question}</p>
+      )}
+      {/* Work space — grid lines for calculations */}
+      <div className="border border-[var(--border)] rounded-lg overflow-hidden mb-1">
+        <div className="px-3 py-1 bg-[var(--background-light)] border-b border-[var(--border)]">
+          <span className="text-xs font-medium text-[var(--text-muted)]">Work Space</span>
+        </div>
+        <div className="p-2 min-h-[80px]" style={{ backgroundImage: 'repeating-linear-gradient(transparent, transparent 23px, var(--border) 23px, var(--border) 24px)', backgroundSize: '100% 24px' }}>
+        </div>
+      </div>
+      {question.answer && (
+        <div className="answer-display mt-3 pt-3 border-t border-[var(--border-light)]">
+          <span className="font-bold text-sm">Sample Solution:</span>
+          <div className="mt-2 p-3 bg-[var(--background-light)] rounded-lg">
+            <p className="text-sm text-[var(--text-primary)] font-mono leading-relaxed whitespace-pre-wrap">{question.answer}</p>
+          </div>
+        </div>
+      )}
+    </>
+  )
+
+  const renderDrawingExercise = () => (
+    <>
+      {isEditing ? (
+        <>
+          <SymbolPalette onInsert={insertSymbol} />
+          <textarea
+            data-field="question"
+            onFocus={trackTextarea}
+            value={editedQuestion.question}
+            onChange={(e) => onUpdateField('question', e.target.value)}
+            className="w-full p-2 text-sm border border-[var(--border)] rounded-lg mb-3 min-h-[60px] resize-y"
+          />
+        </>
+      ) : (
+        <p className="text-sm text-[var(--text-primary)] mb-3">{question.question}</p>
+      )}
+      {/* Drawing box */}
+      <div className="border-2 border-dashed border-[var(--border)] rounded-lg flex items-center justify-center mb-2" style={{ minHeight: 120 }}>
+        <span className="text-xs text-[var(--text-muted)] italic">[ Drawing Space ]</span>
+      </div>
+      {question.answer && (
+        <div className="answer-display mt-2 pt-2 border-t border-[var(--border-light)]">
+          <span className="font-bold text-sm">Expected:</span>
+          <p className="text-sm text-[var(--text-primary)] mt-1">{question.answer}</p>
         </div>
       )}
     </>
@@ -762,6 +1122,58 @@ export function QuestionRenderer({
     </>
   )
 
+  const renderGrammarCorrection = () => (
+    <>
+      <div className="mb-2">
+        <p className="text-xs text-[var(--text-muted)] italic mb-3">{question.instruction}</p>
+        <div className="space-y-3">
+          {(question.sentences || []).map((sent: any, si: number) => (
+            <div key={si} className="p-2 bg-[var(--background-light)] rounded-lg border border-[var(--border)]">
+              <div className="flex items-start gap-2">
+                <span className="text-xs font-medium text-[var(--text-secondary)] mt-0.5">({toRoman(si + 1)})</span>
+                <div className="flex-1">
+                  <p className="text-sm text-[var(--text-primary)] mb-1">
+                    <span className="font-medium">Incorrect: </span>{sent.incorrect}
+                  </p>
+                  <div className="answer-display">
+                    <p className="text-sm text-green-700">
+                      <span className="font-medium">Correct: </span>{sent.answer}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+
+  const renderPartsOfSpeech = () => (
+    <>
+      <div className="mb-2">
+        <p className="text-xs text-[var(--text-muted)] italic mb-3">{question.instruction}</p>
+        <div className="space-y-3">
+          {(question.sentences || []).map((sent: any, si: number) => (
+            <div key={si} className="p-2 bg-[var(--background-light)] rounded-lg border border-[var(--border)]">
+              <div className="flex items-start gap-2">
+                <span className="text-xs font-medium text-[var(--text-secondary)] mt-0.5">({toRoman(si + 1)})</span>
+                <div className="flex-1">
+                  <p className="text-sm text-[var(--text-primary)] mb-1">{sent.sentence}</p>
+                  <div className="answer-display">
+                    <p className="text-xs text-[var(--text-muted)]">
+                      <span className="font-medium">Answer: </span>{sent.answer}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  )
+
   return (
     <div className={`question-container border-b border-[var(--border-light)] last:border-0 pb-4 last:pb-0 mb-4 last:mb-0 ${!isSelected ? 'opacity-50' : ''}`}>
       <div className="flex items-start gap-3">
@@ -782,9 +1194,10 @@ export function QuestionRenderer({
                   <input
                     type="number"
                     value={editedQuestion.marks}
-                    onChange={(e) => onUpdateField('marks', parseInt(e.target.value))}
-                    className="w-14 h-7 px-2 text-xs border border-[var(--border)] rounded"
-                    min="1"
+                    onChange={(e) => onUpdateField('marks', parseFloat(e.target.value))}
+                    className="w-16 h-7 px-2 text-xs border border-[var(--border)] rounded"
+                    min="0"
+                    step="0.5"
                   />
                 </div>
               )}

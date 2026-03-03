@@ -65,6 +65,8 @@ export const SUBJECTIVE_TYPES: QuestionType[] = [
   { id: 'unseen_creative_writing', label: 'Unseen Creative Writing', category: 'subjective' },
   { id: 'picture_description', label: 'Picture Description', category: 'subjective' },
   { id: 'unseen_comprehension_subjective', label: 'Unseen Comprehension (Subjective)', category: 'subjective' },
+  { id: 'grammar_correction', label: 'Grammar Correction', category: 'subjective' },
+  { id: 'parts_of_speech', label: 'Parts of Speech', category: 'subjective' },
 ]
 
 // Mathematics Question Types (9 specific types for embedded assessment)
@@ -76,6 +78,7 @@ export const MATH_OBJECTIVE_TYPES: QuestionType[] = [
   { id: 'true_false', label: 'True/False Statements', category: 'objective' },
   { id: 'label_figures', label: 'Label the Figures', category: 'objective' },
   { id: 'short_practice_questions_missing_solution', label: 'Short Practice (Missing Solution)', category: 'objective' },
+  { id: 'drawing_exercise', label: 'Drawing Exercise (Shapes/Diagrams)', category: 'objective' },
 ]
 
 export const MATH_SUBJECTIVE_TYPES: QuestionType[] = [

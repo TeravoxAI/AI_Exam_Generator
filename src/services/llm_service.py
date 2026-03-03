@@ -185,6 +185,9 @@ class LLMService:
             validated_exam = validate_exam_content(validated_exam)
             logger.info("✅ Comprehensive validation completed")
 
+            # Pedagogical review pass for Grade 1-3 (rewrites grade-inappropriate questions)
+            validated_exam = self._run_pedagogical_review(validated_exam, grade, subject)
+
             total_duration = time.time() - start_time
             logger.info(f"✅ Exam generation completed in {total_duration:.2f}s")
 
@@ -253,6 +256,80 @@ class LLMService:
         logger.error(f"Last 200 chars: {text[-200:]}")
 
         raise json.JSONDecodeError("Could not extract valid JSON from response", text, 0)
+
+    def _run_pedagogical_review(self, exam_json: Dict, grade: str, subject: str) -> Dict:
+        """
+        Second-pass LLM review: checks grade-appropriateness and fixes violations.
+        Focused, fast call — rewrites only flagged questions.
+        """
+        grade_num = int(grade) if grade.isdigit() else 0
+        if grade_num > 3:
+            # Only run review for Grades 1-3 where strict simplicity is critical
+            return exam_json
+
+        review_system = (
+            f"You are a strict pedagogical reviewer for Grade {grade} ({subject}) assessments. "
+            f"Grade {grade} students are aged {5 + grade_num}-{6 + grade_num}. "
+            "Your job: identify and rewrite any questions that violate grade-appropriateness rules, "
+            "then return the corrected full exam JSON.\n\n"
+            f"GRADE {grade} RULES (NON-NEGOTIABLE):\n"
+            "1. NEVER ask students to DEFINE, EXPLAIN, DESCRIBE, or JUSTIFY concepts\n"
+            "2. Questions must be DO/IDENTIFY/CALCULATE/DRAW/CIRCLE/TICK — action-based only\n"
+            f"3. Maximum sentence length: {8 + grade_num * 2} words per question\n"
+            "4. No compound sentences. No abstract vocabulary.\n"
+            "5. Match columns: items must be SHORT (2-5 words each, no long sentences)\n"
+            "6. Story problems: max 2 short sentences of context + 1 question\n"
+            "7. No question should require more than 2 steps of reasoning\n"
+            "8. Each concept tested at most TWICE across all question types\n\n"
+            "TASK:\n"
+            "- Review every question\n"
+            "- Rewrite any that violate the rules above (keep the same structure/fields)\n"
+            "- Do NOT change questions that already comply\n"
+            "- Return the COMPLETE corrected exam JSON\n"
+            "- Return ONLY valid JSON — no markdown, no explanations"
+        )
+
+        review_user = (
+            f"Grade: {grade}\nSubject: {subject}\n\n"
+            f"EXAM TO REVIEW:\n{json.dumps(exam_json, ensure_ascii=False)}\n\n"
+            "Return the corrected exam JSON with grade-inappropriate questions rewritten. "
+            "Return ONLY valid JSON."
+        )
+
+        try:
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://exam-generator.app",
+                "X-Title": "Exam-Gen"
+            }
+            payload = {
+                "model": self.model,
+                "temperature": 0.3,  # Low temperature for conservative corrections
+                "max_tokens": 20000,
+                "messages": [
+                    {"role": "system", "content": review_system},
+                    {"role": "user", "content": review_user}
+                ]
+            }
+            logger.info(f"🎓 Running pedagogical review for Grade {grade}...")
+            resp = requests.post(
+                f"{self.api_base}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=90
+            )
+            if resp.status_code != 200:
+                logger.warning(f"⚠️ Pedagogical review API error {resp.status_code} — using original")
+                return exam_json
+
+            reviewed_text = resp.json()["choices"][0]["message"]["content"]
+            reviewed_exam = self._extract_json(reviewed_text)
+            logger.info("✅ Pedagogical review completed — questions corrected for grade-appropriateness")
+            return reviewed_exam
+        except Exception as e:
+            logger.warning(f"⚠️ Pedagogical review failed ({e}) — using original exam")
+            return exam_json
 
     def _extract_llm_metadata(self, response_data: Dict, response: requests.Response, api_duration: float) -> Dict:
         """

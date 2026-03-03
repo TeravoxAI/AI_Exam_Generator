@@ -38,6 +38,19 @@ class QuestionValidator:
         # Types that use 'passage'
         'unseen_comprehension_objective': 'passage',
         'unseen_comprehension_subjective': 'passage',
+
+        # English subjective types
+        'picture_description': 'instruction',
+        'grammar_correction': 'instruction',
+        'parts_of_speech': 'instruction',
+
+        # Math types
+        'fill_in_blanks_from_word_bank': 'blanks_sentence',
+        'short_practice_questions_missing_solution': 'question',
+        'label_figures': 'instruction',
+        'practice_questions_by_topic': 'question',
+        'real_life_story_problems': 'question',
+        'drawing_exercise': 'question',
     }
 
     @staticmethod
@@ -132,33 +145,37 @@ class QuestionValidator:
         if 'instruction' not in question or not question['instruction']:
             errors.append("Missing or empty 'instruction' field")
 
+        col_a_count = 0
         if 'column_a' not in question:
             errors.append("Missing 'column_a' field")
         elif not isinstance(question['column_a'], list):
             errors.append("'column_a' must be an array")
-        elif len(question['column_a']) != 4:
-            errors.append(f"'column_a' must have exactly 4 items, got {len(question['column_a'])}")
+        elif not (3 <= len(question['column_a']) <= 6):
+            logger.warning(f"'column_a' has unusual count: {len(question['column_a'])}")
+        else:
+            col_a_count = len(question['column_a'])
 
         if 'column_b' not in question:
             errors.append("Missing 'column_b' field")
         elif not isinstance(question['column_b'], list):
             errors.append("'column_b' must be an array")
-        elif len(question['column_b']) != 4:
-            errors.append(f"'column_b' must have exactly 4 items, got {len(question['column_b'])}")
+        elif not (3 <= len(question['column_b']) <= 6):
+            logger.warning(f"'column_b' has unusual count: {len(question['column_b'])}")
 
         if 'answer' not in question:
             errors.append("Missing 'answer' field")
         elif not isinstance(question['answer'], dict):
             errors.append(f"'answer' must be an object, got {type(question['answer'])}")
         else:
-            # Validate answer has correct keys
-            expected_keys = {'1', '2', '3', '4'}
-            actual_keys = set(question['answer'].keys())
-            if actual_keys != expected_keys:
-                errors.append(f"'answer' must have keys 1,2,3,4, got {actual_keys}")
+            # Answer keys should match actual column_a count (not hardcoded to 4)
+            if col_a_count > 0:
+                expected_keys = {str(i) for i in range(1, col_a_count + 1)}
+                actual_keys = set(question['answer'].keys())
+                if actual_keys != expected_keys:
+                    logger.warning(f"'answer' keys {actual_keys} don't match expected {expected_keys}")
 
         if 'marks' not in question:
-            question['marks'] = 4  # Default
+            question['marks'] = len(question.get('column_a', [])) or 4  # Default based on count
 
         if errors:
             logger.error(f"Match Columns validation errors: {errors}")
@@ -210,8 +227,8 @@ class QuestionValidator:
             errors.append("Missing 'sub_questions' field")
         elif not isinstance(question['sub_questions'], list):
             errors.append("'sub_questions' must be an array")
-        elif not (4 <= len(question['sub_questions']) <= 5):
-            logger.warning(f"'sub_questions' should have 4-5 items, got {len(question['sub_questions'])}")
+        elif not (2 <= len(question['sub_questions']) <= 8):
+            logger.warning(f"'sub_questions' has unusual count: {len(question['sub_questions'])}")
         else:
             # Validate each sub-question
             for i, sub_q in enumerate(question['sub_questions']):
@@ -252,8 +269,8 @@ class QuestionValidator:
             errors.append("Missing 'words' field")
         elif not isinstance(question['words'], list):
             errors.append("'words' must be an array")
-        elif len(question['words']) != 3:
-            logger.warning(f"'words' should have exactly 3 items, got {len(question['words'])}")
+        elif not (2 <= len(question['words']) <= 8):
+            logger.warning(f"'words' has unusual count: {len(question['words'])}")
 
         if 'marks' not in question:
             question['marks'] = 3  # Default
@@ -288,6 +305,60 @@ class QuestionValidator:
 
         if errors:
             logger.error(f"Complete Sentences validation errors: {errors}")
+
+        return question
+
+    @staticmethod
+    def validate_grammar_correction(question: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate Grammar Correction question structure"""
+        errors = []
+
+        if 'instruction' not in question or not question['instruction']:
+            errors.append("Missing or empty 'instruction' field")
+
+        if 'sentences' not in question:
+            errors.append("Missing 'sentences' field")
+        elif not isinstance(question['sentences'], list):
+            errors.append("'sentences' must be an array")
+        else:
+            for i, sent in enumerate(question['sentences']):
+                if 'incorrect' not in sent:
+                    errors.append(f"sentence {i+1} missing 'incorrect' field")
+                if 'answer' not in sent:
+                    errors.append(f"sentence {i+1} missing 'answer' field")
+
+        if 'marks' not in question:
+            question['marks'] = len(question.get('sentences', [])) or 5
+
+        if errors:
+            logger.error(f"Grammar Correction validation errors: {errors}")
+
+        return question
+
+    @staticmethod
+    def validate_parts_of_speech(question: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate Parts of Speech question structure"""
+        errors = []
+
+        if 'instruction' not in question or not question['instruction']:
+            errors.append("Missing or empty 'instruction' field")
+
+        if 'sentences' not in question:
+            errors.append("Missing 'sentences' field")
+        elif not isinstance(question['sentences'], list):
+            errors.append("'sentences' must be an array")
+        else:
+            for i, sent in enumerate(question['sentences']):
+                if 'sentence' not in sent:
+                    errors.append(f"sentence {i+1} missing 'sentence' field")
+                if 'answer' not in sent:
+                    errors.append(f"sentence {i+1} missing 'answer' field")
+
+        if 'marks' not in question:
+            question['marks'] = len(question.get('sentences', [])) or 5
+
+        if errors:
+            logger.error(f"Parts of Speech validation errors: {errors}")
 
         return question
 
@@ -372,14 +443,39 @@ class QuestionValidator:
                 if 'marks' not in question:
                     question['marks'] = 2 if question_type == 'short_answer' else 5
                 return question
-            elif question_type in ['word_problems', 'step_by_step']:
-                # Math-specific types
-                if 'question' not in question:
-                    logger.warning(f"{question_type} missing 'question' field")
+            elif question_type == 'picture_description':
+                # Picture description: instruction + optional image_description + answer
+                if 'instruction' not in question or not question['instruction']:
+                    logger.warning("picture_description missing 'instruction' field")
+                if 'marks' not in question:
+                    question['marks'] = 5
+                return question
+            elif question_type == 'grammar_correction':
+                return cls.validate_grammar_correction(question)
+            elif question_type == 'parts_of_speech':
+                return cls.validate_parts_of_speech(question)
+            elif question_type in [
+                'word_problems', 'step_by_step',
+                'fill_in_blanks_from_word_bank',
+                'short_practice_questions_missing_solution',
+                'label_figures',
+                'practice_questions_by_topic',
+                'real_life_story_problems',
+            ]:
+                # Math-specific types — flexible validation
+                if 'question' not in question and 'instruction' not in question and 'blanks_sentence' not in question:
+                    logger.warning(f"{question_type} missing primary question field")
                 if 'answer' not in question:
                     logger.warning(f"{question_type} missing 'answer' field")
                 if 'marks' not in question:
-                    question['marks'] = 3
+                    default_marks = {
+                        'fill_in_blanks_from_word_bank': 1,
+                        'short_practice_questions_missing_solution': 2,
+                        'label_figures': 3,
+                        'practice_questions_by_topic': 3,
+                        'real_life_story_problems': 4,
+                    }
+                    question['marks'] = default_marks.get(question_type, 3)
                 return question
             else:
                 logger.warning(f"Unknown question type: {question_type}")

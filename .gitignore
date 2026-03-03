@@ -99,3 +99,7 @@ test-results/
 nul
 Thumbs.db
 plan.md
+# Data/spreadsheet exports
+*.xlsx
+*.xls
+*.csv
