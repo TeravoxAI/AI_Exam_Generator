@@ -1,4 +1,4 @@
-import { Edit2, Save, X, Upload } from 'lucide-react'
+import { Edit2, Save, X, Upload, Trash2 } from 'lucide-react'
 import { useRef, useCallback } from 'react'
 
 // Mathematical / shape symbols palette (shown in edit mode)
@@ -51,6 +51,7 @@ interface QuestionProps {
   // Image support for Picture Description
   questionImage?: string
   onImageUpload?: (file: File) => void
+  onDelete?: () => void
 }
 
 // Math question types that benefit from symbol palette + image upload
@@ -74,6 +75,7 @@ export function QuestionRenderer({
   onUpdateField,
   questionImage,
   onImageUpload,
+  onDelete,
 }: QuestionProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const activeTextareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -1188,6 +1190,9 @@ export function QuestionRenderer({
             {/* Sub-part label: (i), (ii), (iii)... */}
             <span className="text-sm font-bold text-[var(--text-secondary)]">({toRoman(index + 1)})</span>
             <div className="flex items-center gap-2">
+              {!isEditing && question.marks != null && (
+                <span className="text-xs text-[var(--text-muted)] font-medium">[{question.marks} mark{question.marks !== 1 ? 's' : ''}]</span>
+              )}
               {isEditing && (
                 <div className="flex items-center gap-1">
                   <span className="text-xs text-[var(--text-muted)]">Marks:</span>
@@ -1208,6 +1213,15 @@ export function QuestionRenderer({
                   title="Edit question"
                 >
                   <Edit2 size={14} className="text-[var(--text-muted)]" />
+                </button>
+              )}
+              {!isEditing && onDelete && (
+                <button
+                  onClick={onDelete}
+                  className="no-print p-1 hover:bg-red-50 rounded transition-colors"
+                  title="Delete this question"
+                >
+                  <Trash2 size={14} className="text-red-400 hover:text-red-600" />
                 </button>
               )}
             </div>

@@ -122,7 +122,7 @@ class QuestionValidator:
         # Required fields
         if 'question' not in question or not question['question']:
             errors.append("Missing or empty 'question' field")
-        elif '______' not in question['question']:
+        elif '___' not in question['question']:
             logger.warning(f"Fill in blank question missing blank marker: {question['question']}")
 
         if 'answer' not in question or not question['answer']:
@@ -461,6 +461,7 @@ class QuestionValidator:
                 'label_figures',
                 'practice_questions_by_topic',
                 'real_life_story_problems',
+                'drawing_exercise',
             ]:
                 # Math-specific types — flexible validation
                 if 'question' not in question and 'instruction' not in question and 'blanks_sentence' not in question:

@@ -1,6 +1,6 @@
 """
 LLM Service for exam question generation.
-Integrates with OpenRouter API for OpenAI GPT-5.1 model.
+Integrates with OpenRouter API for Google Gemini 2.5 Flash model.
 """
 
 import os
@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 
 
 class LLMService:
-    """Service for generating exam questions using OpenRouter with OpenAI GPT-5.1"""
+    """Service for generating exam questions using OpenRouter with Google Gemini 2.5 Flash"""
 
     def __init__(self):
         """Initialize LLM service with OpenRouter API key from environment"""
@@ -28,7 +28,7 @@ class LLMService:
                 "Please set your OpenRouter API key in the environment."
             )
         self.api_base = "https://openrouter.ai/api/v1"
-        self.model = "openai/gpt-5.1"  # OpenAI GPT-5.1 via OpenRouter
+        self.model = "google/gemini-2.5-flash"  # Gemini 2.5 Flash via OpenRouter
 
     def generate_exam_questions(
         self,
@@ -80,9 +80,13 @@ class LLMService:
                 "X-Title": "Exam-Gen"
             }
 
+            # Use lower temperature for junior grades to produce simpler, more predictable content
+            grade_num = int(grade) if grade.strip().isdigit() else 4
+            temperature = 0.4 if grade_num <= 3 else 0.7
+
             payload = {
                 "model": self.model,
-                "temperature": 0.7,
+                "temperature": temperature,
                 "max_tokens": 25000,  # Increased for comprehensive exam responses with all question types
                 "messages": [
                     {"role": "system", "content": system_prompt},
@@ -91,7 +95,7 @@ class LLMService:
             }
             logger.info(f"🚀 Calling OpenRouter API with model: {self.model}")
             logger.info(f"   Endpoint: {self.api_base}/chat/completions")
-            logger.info(f"   Temperature: 0.7 | Max tokens: 25000")
+            logger.info(f"   Temperature: {temperature} | Max tokens: 25000")
             logger.debug(f"   System prompt length: {len(system_prompt)} chars")
             logger.debug(f"   User prompt length: {len(user_prompt)} chars")
 
@@ -267,6 +271,9 @@ class LLMService:
             # Only run review for Grades 1-3 where strict simplicity is critical
             return exam_json
 
+        number_limit = {1: "1-10 (answers ≤10)", 2: "1-20 for operations (answers ≤20), 1-99 for place value only", 3: "up to 999 for place value; multiplication tables 1-5 only"}.get(grade_num, "grade-appropriate")
+        word_limit = {1: 6, 2: 10, 3: 15}.get(grade_num, 20)
+
         review_system = (
             f"You are a strict pedagogical reviewer for Grade {grade} ({subject}) assessments. "
             f"Grade {grade} students are aged {5 + grade_num}-{6 + grade_num}. "
@@ -275,15 +282,33 @@ class LLMService:
             f"GRADE {grade} RULES (NON-NEGOTIABLE):\n"
             "1. NEVER ask students to DEFINE, EXPLAIN, DESCRIBE, or JUSTIFY concepts\n"
             "2. Questions must be DO/IDENTIFY/CALCULATE/DRAW/CIRCLE/TICK — action-based only\n"
-            f"3. Maximum sentence length: {8 + grade_num * 2} words per question\n"
-            "4. No compound sentences. No abstract vocabulary.\n"
-            "5. Match columns: items must be SHORT (2-5 words each, no long sentences)\n"
-            "6. Story problems: max 2 short sentences of context + 1 question\n"
-            "7. No question should require more than 2 steps of reasoning\n"
-            "8. Each concept tested at most TWICE across all question types\n\n"
+            f"3. Maximum question length: {word_limit} words\n"
+            f"4. Number range: {number_limit}. ANY question with numbers outside this range MUST be rewritten.\n"
+            "5. No compound sentences. No abstract vocabulary.\n"
+            "6. Match columns: items must be SHORT (2-4 words each, e.g. '5+3' not 'Add five and three')\n"
+            "7. Story problems: max 1-2 short sentences of context + 1 question (Grade 1-2: 1 sentence only)\n"
+            "8. No question should require more than 1 operation for Grade 1-2, 2 operations for Grade 3\n"
+            "9. Each concept tested at most TWICE across all question types\n"
+            "10. MCQ/circle_correct_answer options: EXACTLY 4 options always. If 3 options found, ADD a 4th plausible distractor.\n"
+            "11. circle_correct_answer: EXACTLY 4 options. NEVER 3. Fix any with 3 options by adding a 4th.\n"
+            "12. practice_questions_by_topic for Grade 1-2: ONLY direct computation (e.g. '9 + 7 = ?'). "
+            "NEVER 'What is X?', 'Define X', 'Explain X', 'Give an example of X' — rewrite as computation.\n"
+            "13. real_life_story_problems: 'context' must describe WHO + STARTING STATE, not ask a question. "
+            "'question' must ask WHERE or HOW MANY — NEVER 'What kind of turn is this?' (vocabulary recall, banned). "
+            "Spatial problems need requires_visual_support=true and "
+            "solution_steps=['Given:', 'Work:', 'Answer:'] for ALL Grade 1–2 problems.\n\n"
+            "REWRITING EXAMPLES:\n"
+            "BAD (Grade 2): 'Calculate the total if you have 45 apples and buy 38 more.' → TOO HARD (>20)\n"
+            "GOOD (Grade 2): 'You have 9 apples. You get 8 more. How many now?'\n"
+            "BAD (Grade 2): 'Explain what place value means.' → BANNED (definition)\n"
+            "GOOD (Grade 2): 'Circle the tens digit in 34: (A) 3  (B) 4  (C) 34  (D) 1'\n"
+            "BAD (Grade 2): 'What is rotation?' → BANNED (definition)\n"
+            "GOOD (Grade 2): '4 + ___ = 9' → computation question\n"
+            "BAD: circle_correct_answer with 3 options → MUST have 4 options\n"
+            "GOOD: Add a 4th distractor: (D) Three-quarter turn\n\n"
             "TASK:\n"
             "- Review every question\n"
-            "- Rewrite any that violate the rules above (keep the same structure/fields)\n"
+            "- Rewrite ANY that violate rules (keep same JSON structure/fields)\n"
             "- Do NOT change questions that already comply\n"
             "- Return the COMPLETE corrected exam JSON\n"
             "- Return ONLY valid JSON — no markdown, no explanations"
@@ -388,10 +413,10 @@ class LLMService:
                 input_tokens = usage_data.get("prompt_tokens", 0)
                 output_tokens = usage_data.get("completion_tokens", 0)
 
-                # GPT-5.1 pricing (adjust based on current rates)
-                # These are example rates per 1M tokens
-                input_cost_per_million = 0.001  # $0.001 per 1K tokens
-                output_cost_per_million = 0.002  # $0.002 per 1K tokens
+                # Gemini 2.5 Flash pricing via OpenRouter
+                # $0.15 per 1M input tokens, $0.60 per 1M output tokens
+                input_cost_per_million = 0.00015  # $0.15 per 1M tokens
+                output_cost_per_million = 0.00060  # $0.60 per 1M tokens
 
                 input_cost = (input_tokens / 1000) * input_cost_per_million
                 output_cost = (output_tokens / 1000) * output_cost_per_million

@@ -5,6 +5,7 @@ interface ExamPDFOptions {
   includeAnswerKey?: boolean
   schoolName?: string
   totalMarksOverride?: number
+  timeAllowed?: string
 }
 
 // Convert numeric grade string to uppercase Roman numeral (e.g. "2" → "II")
@@ -58,7 +59,7 @@ export async function generateExamPDF(
   options: ExamPDFOptions = {},
   questionImages: Record<string, string> = {}
 ): Promise<void> {
-  const { filename = `exam_${new Date().toISOString().split('T')[0]}.pdf`, schoolName, totalMarksOverride } = options
+  const { filename = `exam_${new Date().toISOString().split('T')[0]}.pdf`, schoolName, totalMarksOverride, timeAllowed } = options
 
   try {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
@@ -151,7 +152,7 @@ export async function generateExamPDF(
     doc.setFont('helvetica', 'bold')
     doc.text('Class:', col1x + pad + 1, row1y)
     doc.setFont('helvetica', 'normal')
-    doc.text(`Class ${gradeToRoman(String(exam.grade || ''))}`, col1x + pad + 14, row1y)
+    doc.text(gradeToRoman(String(exam.grade || '').replace(/^class\s*/i, '')), col1x + pad + 14, row1y)
 
     doc.setFont('helvetica', 'bold')
     doc.text('Total Marks:', col2x + pad + 1, row1y)
@@ -167,6 +168,10 @@ export async function generateExamPDF(
 
     doc.setFont('helvetica', 'bold')
     doc.text('Time Allowed:', col1x + pad + 1, row2y)
+    if (timeAllowed) {
+      doc.setFont('helvetica', 'normal')
+      doc.text(timeAllowed, col1x + pad + 31, row2y)
+    }
     doc.line(col1x + pad + 30, row2y + 1, bx + contentWidth - pad, row2y + 1)
 
     // Row 3 – Name | Roll No | Section  (all on one line)
@@ -222,8 +227,9 @@ export async function generateExamPDF(
     // QUESTION RENDERING HELPERS
     // ───────────────────────────────────────────────
     let questionNum = 0
+    const ix = margin  // sub-items align flush with Q header — no indent
 
-    // Draw a question group header (Q1. True / False  (5 marks))
+    // Draw a question group header (Q1. True / False  (5))
     const addGroupHeader = (typeId: string, totalTypeMarks: number) => {
       questionNum++
       checkPageBreak(12)
@@ -232,10 +238,10 @@ export async function generateExamPDF(
       doc.setFont('helvetica', 'bold')
       doc.text(`Q${questionNum}.  ${label}`, margin, yPos)
       doc.setFont('helvetica', 'normal')
-      doc.setFontSize(12)
-      const marksText = `(${formatMarks(totalTypeMarks)} marks)`
+      doc.setFontSize(13)
+      const marksText = `[   /${formatMarks(totalTypeMarks)}]`
       doc.text(marksText, pageWidth - margin, yPos, { align: 'right' })
-      yPos += 5
+      yPos += 9
     }
 
     // Render a passage block
@@ -278,9 +284,9 @@ export async function generateExamPDF(
       const prefix = `(${toRoman(subIdx + 1)})  `
       doc.setFontSize(12)
       doc.setFont('helvetica', 'normal')
-      const stmtLines = wrap(prefix + statement, contentWidth - 28)
+      const stmtLines = wrap(prefix + statement, contentWidth - 28 - (ix - margin))
       stmtLines.forEach((line: string, i: number) => {
-        doc.text(line, margin + 5, yPos + i * 5.5)
+        doc.text(line, ix, yPos + i * 5.5)
       })
       // Two boxes on right — no T/F labels (they appear once as column headers)
       const boxY = yPos - 3.5
@@ -295,11 +301,11 @@ export async function generateExamPDF(
       checkPageBreak(25)
       const prefix = `(${toRoman(subIdx + 1)})  `
       const qText = question.question || question.statement || ''
-      const qLines = wrap(prefix + qText, contentWidth - 10)
+      const qLines = wrap(prefix + qText, contentWidth - (ix - margin) - 10)
       doc.setFontSize(12)
       doc.setFont('helvetica', 'normal')
       qLines.forEach((line: string, i: number) => {
-        doc.text(line, margin + 5, yPos + i * 5.5)
+        doc.text(line, ix, yPos + i * 5.5)
       })
       yPos += qLines.length * 5.5 + 2
 
@@ -309,7 +315,7 @@ export async function generateExamPDF(
         const colW = contentWidth / 2
         question.options.forEach((opt: string, oi: number) => {
           const col = oi % 2
-          const xPos = margin + 10 + col * colW
+          const xPos = ix + col * colW
           if (col === 0 && oi > 0) yPos += 5.5
           const optText = `${optLabels[oi]} ${opt}`
           const optLines = wrap(optText, colW - 5)
@@ -322,40 +328,52 @@ export async function generateExamPDF(
       yPos += 2
     }
 
-    // Replace _______ blanks in question text with blanks sized proportionally to each answer word
-    const proportionalBlanks = (questionText: string, answer: any): string => {
-      let answers: string[] = []
-      if (Array.isArray(answer)) {
-        answers = answer.map((a: any) => String(a).trim())
-      } else if (typeof answer === 'string' && answer.includes(',')) {
-        answers = answer.split(',').map((a: string) => a.trim())
-      } else {
-        answers = [String(answer || '').trim()]
-      }
-      let ansIdx = 0
-      return questionText.replace(/_{4,}/g, () => {
-        const ans = answers[ansIdx] || answers[answers.length - 1] || ''
-        ansIdx++
-        // blank width = answer chars + 3 padding, clamped between 5 and 20
-        const n = Math.max(5, Math.min(20, ans.length + 3))
-        return '_'.repeat(n)
-      })
-    }
 
-    // Render Fill in Blanks sub-item (no separate answer line)
+    // Render Fill in Blanks sub-item — blanks as drawn lines, not underscores
     const addFillInBlanksItem = (question: any, subIdx: number) => {
-      checkPageBreak(10)
+      checkPageBreak(14)
       const prefix = `(${toRoman(subIdx + 1)})  `
       const rawText = question.question || ''
-      // Make blanks proportional to the expected answer length
-      const qText = proportionalBlanks(rawText, question.answer)
+      // Split text at blank markers (___) so we can draw real lines
+      const segments = rawText.split(/_{3,}/)
       doc.setFontSize(12)
       doc.setFont('helvetica', 'normal')
-      const qLines = wrap(prefix + qText, contentWidth - 10)
-      qLines.forEach((line: string, i: number) => {
-        doc.text(line, margin + 5, yPos + i * 5.5)
+
+      // Measure the prefix width so we can start text correctly
+      let xCursor = ix
+      const baseY = yPos
+
+      // Render prefix
+      doc.text(prefix, xCursor, baseY)
+      xCursor += doc.getTextWidth(prefix)
+
+      // Render each text segment with a drawn blank line between segments
+      const blankWidth = 38  // mm — wide enough to write a word clearly
+      segments.forEach((seg: string, si: number) => {
+        // Render text segment
+        if (seg) {
+          // Check if text overflows line — wrap to next line if needed
+          const segWidth = doc.getTextWidth(seg)
+          if (xCursor + segWidth > pageWidth - margin) {
+            yPos += 7
+            xCursor = ix + doc.getTextWidth(prefix) // re-indent to align under text
+          }
+          doc.text(seg, xCursor, yPos)
+          xCursor += doc.getTextWidth(seg)
+        }
+        // After each segment except the last, draw a blank line
+        if (si < segments.length - 1) {
+          if (xCursor + blankWidth > pageWidth - margin) {
+            yPos += 7
+            xCursor = ix + doc.getTextWidth(prefix)
+          }
+          doc.setLineWidth(0.4)
+          doc.line(xCursor + 2, yPos + 1, xCursor + 2 + blankWidth, yPos + 1)
+          xCursor += blankWidth + 4
+        }
       })
-      yPos += qLines.length * 5.5 + 3
+
+      yPos = baseY + 12  // generous spacing between items
     }
 
     // Render Match Columns group (single question with two-column table)
@@ -367,15 +385,11 @@ export async function generateExamPDF(
       const neededH = rows * rowH + 20
       checkPageBreak(neededH)
 
-      const prefix = `(${toRoman(subIdx + 1)})  `
-      const instrText = question.instruction || 'Match the items in Column A with Column B.'
-      const instrLines = wrap(prefix + instrText, contentWidth - 10)
+      const prefix = `(${toRoman(subIdx + 1)})`
       doc.setFontSize(12)
-      doc.setFont('helvetica', 'italic')
-      instrLines.forEach((line: string, i: number) => {
-        doc.text(line, margin + 5, yPos + i * 5.5)
-      })
-      yPos += instrLines.length * 5.5 + 3
+      doc.setFont('helvetica', 'bold')
+      doc.text(prefix, ix, yPos)
+      yPos += 6
 
       // Table headers
       const tableLeft = margin + 5
@@ -423,11 +437,11 @@ export async function generateExamPDF(
           checkPageBreak(12)
           const prefix = `(${toRoman(subIdx + 1)})  `
           const qText = subQ.question || subQ.statement || ''
-          const qLines = wrap(prefix + qText, contentWidth - 10)
+          const qLines = wrap(prefix + qText, contentWidth - (ix - margin) - 10)
           doc.setFontSize(12)
           doc.setFont('helvetica', 'normal')
           qLines.forEach((line: string, i: number) => {
-            doc.text(line, margin + 5, yPos + i * 5.5)
+            doc.text(line, ix, yPos + i * 5.5)
           })
           yPos += qLines.length * 5.5 + 2
 
@@ -445,24 +459,13 @@ export async function generateExamPDF(
             yPos += 7
           }
 
-          // Answer lines for subjective comprehension
+          // Answer lines for subjective comprehension (no hint text shown on paper)
           if (typeId === 'unseen_comprehension_subjective') {
-            // Show guidance if available
-            const hints: string[] = []
-            if (subQ.sentences_required) hints.push(`Write ${subQ.sentences_required} sentence${subQ.sentences_required > 1 ? 's' : ''}`)
-            if (subQ.word_limit) hints.push(`(max ${subQ.word_limit} words)`)
-            if (hints.length > 0) {
-              checkPageBreak(6)
-              doc.setFontSize(9)
-              doc.setFont('helvetica', 'italic')
-              doc.text(hints.join(' '), margin + 7, yPos)
-              yPos += 5
-            }
-            const lineCount = subQ.sentences_required ? Math.min(subQ.sentences_required + 1, 5) : Math.min(Math.ceil((subQ.marks || 1) * 1.5), 4)
+            const lineCount = subQ.sentences_required ? Math.min(subQ.sentences_required + 2, 6) : Math.min(Math.ceil((subQ.marks || 1) * 1.5), 5)
             for (let l = 0; l < lineCount; l++) {
               doc.setLineWidth(0.2)
-              doc.line(margin + 5, yPos, pageWidth - margin - 5, yPos)
-              yPos += 6
+              doc.line(margin, yPos, pageWidth - margin, yPos)
+              yPos += 12
             }
           }
           yPos += 2
@@ -480,30 +483,30 @@ export async function generateExamPDF(
       doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
       const labelText = `${prefix}${word}:`
-      doc.text(labelText, margin + 5, yPos)
+      doc.text(labelText, ix, yPos)
       doc.setFont('helvetica', 'normal')
       doc.setLineWidth(0.2)
-      doc.line(margin + 5 + doc.getTextWidth(labelText) + 4, yPos + 1, pageWidth - margin - 5, yPos + 1)
+      doc.line(ix + doc.getTextWidth(labelText) + 4, yPos + 1, pageWidth - margin - 5, yPos + 1)
       yPos += 8
     }
 
     // Render short/long answer sub-item
     const addAnswerLinesItem = (question: any, subIdx: number, lineCount = 4) => {
-      checkPageBreak(lineCount * 7 + 15)
+      checkPageBreak(lineCount * 12 + 15)
       const prefix = `(${toRoman(subIdx + 1)})  `
       const qText = question.question || question.statement || ''
-      const qLines = wrap(prefix + qText, contentWidth - 10)
+      const qLines = wrap(prefix + qText, contentWidth - (ix - margin) - 10)
       doc.setFontSize(12)
       doc.setFont('helvetica', 'normal')
       qLines.forEach((line: string, i: number) => {
-        doc.text(line, margin + 5, yPos + i * 5.5)
+        doc.text(line, ix, yPos + i * 5.5)
       })
       yPos += qLines.length * 5.5 + 3
       for (let l = 0; l < lineCount; l++) {
-        checkPageBreak(8)
+        checkPageBreak(13)
         doc.setLineWidth(0.2)
-        doc.line(margin + 5, yPos, pageWidth - margin - 5, yPos)
-        yPos += 8
+        doc.line(margin, yPos, pageWidth - margin, yPos)
+        yPos += 12
       }
       yPos += 2
     }
@@ -512,13 +515,14 @@ export async function generateExamPDF(
     const addCreativeWritingItem = (question: any, subIdx: number) => {
       checkPageBreak(50)
       const prefix = `(${toRoman(subIdx + 1)})  `
-      const promptText = question.instruction || question.prompt || ''
+      // Use prompt (topic) only — skip meta-instructions like "write one sentence"
+      const promptText = question.prompt || question.topic || ''
       // Set font BEFORE wrap() so splitTextToSize uses correct character widths
       doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
-      const pLines = wrap(prefix + promptText, contentWidth - 12)
+      const pLines = wrap(prefix + promptText, contentWidth - (ix - margin) - 12)
       pLines.forEach((line: string, i: number) => {
-        doc.text(line, margin + 5, yPos + i * 5.5)
+        doc.text(line, ix, yPos + i * 5.5)
       })
       yPos += pLines.length * 5.5 + 3
 
@@ -528,19 +532,19 @@ export async function generateExamPDF(
         checkPageBreak(8)
         doc.setFontSize(10)
         doc.setFont('helvetica', 'bold')
-        doc.text('Word Bank: ', margin + 5, yPos)
+        doc.text('Word Bank: ', ix, yPos)
         doc.setFont('helvetica', 'normal')
-        doc.text(vocabWords.join('  |  '), margin + 28, yPos)
+        doc.text(vocabWords.join('  |  '), ix + 23, yPos)
         yPos += 7
       }
 
       // Use lines_required if available, else default to 6
       const linesRequired = question.lines_required || 6
       for (let l = 0; l < linesRequired; l++) {
-        checkPageBreak(8)
+        checkPageBreak(13)
         doc.setLineWidth(0.2)
-        doc.line(margin + 5, yPos, pageWidth - margin - 5, yPos)
-        yPos += 7
+        doc.line(margin, yPos, pageWidth - margin, yPos)
+        yPos += 12
       }
       yPos += 2
     }
@@ -550,11 +554,11 @@ export async function generateExamPDF(
       checkPageBreak(60)
       const prefix = `(${toRoman(subIdx + 1)})  `
       const desc = question.instruction || 'Look at the picture and describe it.'
-      const dLines = wrap(prefix + desc, contentWidth - 10)
+      const dLines = wrap(prefix + desc, contentWidth - (ix - margin) - 10)
       doc.setFontSize(12)
       doc.setFont('helvetica', 'normal')
       dLines.forEach((line: string, i: number) => {
-        doc.text(line, margin + 5, yPos + i * 5.5)
+        doc.text(line, ix, yPos + i * 5.5)
       })
       yPos += dLines.length * 5.5 + 3
 
@@ -587,24 +591,21 @@ export async function generateExamPDF(
       const picLinesRequired = question.lines_required || 4
       for (let l = 0; l < picLinesRequired; l++) {
         doc.setLineWidth(0.2)
-        doc.line(margin + 5, yPos, pageWidth - margin - 5, yPos)
-        yPos += 7
+        doc.line(margin, yPos, pageWidth - margin, yPos)
+        yPos += 12
       }
       yPos += 3
     }
 
     // Render label figures sub-item (instruction text + image box per sub-item)
-    const addLabelFiguresItem = (question: any, subIdx: number, imageData?: string) => {
+    const addLabelFiguresItem = (_question: any, subIdx: number, imageData?: string) => {
       checkPageBreak(60)
-      const prefix = `(${toRoman(subIdx + 1)})  `
-      const desc = question.instruction || question.question || ''
+      const prefix = `(${toRoman(subIdx + 1)})`
+      // Only show the sub-item number — no repeated instruction text
       doc.setFontSize(12)
-      doc.setFont('helvetica', 'normal')
-      const dLines = wrap(prefix + desc, contentWidth - 10)
-      dLines.forEach((line: string, i: number) => {
-        doc.text(line, margin + 5, yPos + i * 5.5)
-      })
-      yPos += dLines.length * 5.5 + 3
+      doc.setFont('helvetica', 'bold')
+      doc.text(prefix, ix, yPos)
+      yPos += 6
 
       // Image box (centered)
       const imgBoxW = 70
@@ -632,44 +633,109 @@ export async function generateExamPDF(
 
       // One answer line for the label
       doc.setLineWidth(0.2)
-      doc.line(margin + 5, yPos, pageWidth - margin - 5, yPos)
-      yPos += 8
+      doc.line(margin, yPos, pageWidth - margin, yPos)
+      yPos += 10
     }
 
     // Render a drawing exercise sub-item (question text + empty drawing box)
-    const addDrawingExerciseItem = (question: any, subIdx: number, boxW = 55, boxH = 45) => {
-      checkPageBreak(boxH + 20)
+    const addDrawingExerciseItem = (question: any, subIdx: number, boxW = 110, boxH = 40) => {
+      checkPageBreak(boxH + 25)
       const prefix = `(${toRoman(subIdx + 1)})  `
       const qText = question.question || question.instruction || ''
       doc.setFontSize(12)
       doc.setFont('helvetica', 'normal')
-      const qLines = wrap(prefix + qText, contentWidth - 10)
+      const qLines = wrap(prefix + qText, contentWidth - (ix - margin) - 10)
       qLines.forEach((line: string, i: number) => {
-        doc.text(line, margin + 5, yPos + i * 5.5)
+        doc.text(line, ix, yPos + i * 5.5)
       })
-      yPos += qLines.length * 5.5 + 3
+      yPos += qLines.length * 5.5 + 5
 
-      // Centered drawing box
+      // Rectangular drawing box (wide, not square)
       const bx = margin + (contentWidth - boxW) / 2
       doc.setLineWidth(0.5)
       doc.rect(bx, yPos, boxW, boxH)
-      doc.setFontSize(7)
+      doc.setFontSize(8)
       doc.setTextColor(180, 180, 180)
       doc.text('Draw here', bx + boxW / 2, yPos + boxH / 2, { align: 'center' })
       doc.setTextColor(0, 0, 0)
-      yPos += boxH + 4
+      yPos += boxH + 12
     }
 
     // Render a work-space box for calculation questions (question text + ruled work area)
+    // Render real-life story problem: shows context sentence, then question, then answer lines
+    const addStoryProblemItem = (question: any, subIdx: number) => {
+      checkPageBreak(50)
+      const prefix = `(${toRoman(subIdx + 1)})  `
+      doc.setFontSize(12)
+
+      const context = question.context || ''
+      const qText = question.question || ''
+
+      // Render prefix + context
+      if (context) {
+        doc.setFontSize(12)
+        doc.setFont('helvetica', 'italic')
+        const ctxLines = wrap(prefix + context, contentWidth - 10)
+        ctxLines.forEach((line: string, i: number) => {
+          doc.text(line, ix, yPos + i * 5.5)
+        })
+        yPos += ctxLines.length * 5.5 + 1
+
+        // Show question on next line if it adds new information
+        if (qText && !context.toLowerCase().includes(qText.toLowerCase().slice(0, 20))) {
+          doc.setFont('helvetica', 'bold')
+          const qLines = wrap(qText, contentWidth - 10)
+          qLines.forEach((line: string, i: number) => {
+            doc.text(line, ix + 5, yPos + i * 5.5)
+          })
+          yPos += qLines.length * 5.5 + 2
+        } else {
+          yPos += 2
+        }
+      } else {
+        doc.setFontSize(12)
+        doc.setFont('helvetica', 'normal')
+        const qLines = wrap(prefix + qText, contentWidth - 10)
+        qLines.forEach((line: string, i: number) => {
+          doc.text(line, ix, yPos + i * 5.5)
+        })
+        yPos += qLines.length * 5.5 + 2
+      }
+
+      // Structured workspace using solution_steps — filter out any diagram-related steps
+      const solutionSteps: string[] = (question.solution_steps || [])
+        .filter((s: string) => !s.toLowerCase().includes('diagram') && !s.toLowerCase().includes('count the turn'))
+      if (solutionSteps.length > 0) {
+        checkPageBreak(solutionSteps.length * 14 + 5)
+        solutionSteps.forEach((stepLabel: string) => {
+          checkPageBreak(14)
+          doc.setFontSize(11)
+          doc.setFont('helvetica', 'bold')
+          doc.text(stepLabel, ix, yPos)
+          doc.setLineWidth(0.2)
+          doc.line(ix + doc.getTextWidth(stepLabel) + 4, yPos + 1, pageWidth - margin, yPos + 1)
+          yPos += 12
+        })
+      } else {
+        for (let l = 0; l < 4; l++) {
+          checkPageBreak(13)
+          doc.setLineWidth(0.2)
+          doc.line(margin, yPos, pageWidth - margin, yPos)
+          yPos += 12
+        }
+      }
+      yPos += 3
+    }
+
     const addWorkSpaceItem = (question: any, subIdx: number, workLines = 5) => {
       checkPageBreak(workLines * 8 + 20)
       const prefix = `(${toRoman(subIdx + 1)})  `
       const qText = question.question || question.statement || ''
       doc.setFontSize(12)
       doc.setFont('helvetica', 'normal')
-      const qLines = wrap(prefix + qText, contentWidth - 10)
+      const qLines = wrap(prefix + qText, contentWidth - (ix - margin) - 10)
       qLines.forEach((line: string, i: number) => {
-        doc.text(line, margin + 5, yPos + i * 5.5)
+        doc.text(line, ix, yPos + i * 5.5)
       })
       yPos += qLines.length * 5.5 + 2
 
@@ -693,7 +759,7 @@ export async function generateExamPDF(
         doc.line(margin + 5, yPos + l * 8, margin + 5 + contentWidth - 10, yPos + l * 8)
       }
       doc.setDrawColor(0, 0, 0)
-      yPos += wsH + 4
+      yPos += wsH + 12
     }
 
     // Render complete sentences sub-item
@@ -702,11 +768,11 @@ export async function generateExamPDF(
       const prefix = `(${toRoman(subIdx + 1)})  `
       const isObj = typeof sent === 'object' && sent !== null
       const text = isObj ? (sent.incomplete || sent.sentence || '') : String(sent || '')
-      const qLines = wrap(prefix + text, contentWidth - 10)
+      const qLines = wrap(prefix + text, contentWidth - (ix - margin) - 10)
       doc.setFontSize(12)
       doc.setFont('helvetica', 'normal')
       qLines.forEach((line: string, i: number) => {
-        doc.text(line, margin + 5, yPos + i * 5.5)
+        doc.text(line, ix, yPos + i * 5.5)
       })
       yPos += qLines.length * 5.5 + 3
     }
@@ -715,98 +781,78 @@ export async function generateExamPDF(
     const addRearrangeSentencesItem = (question: any, subIdx: number) => {
       checkPageBreak(15)
       const prefix = `(${toRoman(subIdx + 1)})  `
-      const instrText = question.instruction || 'Rearrange the following sentences:'
-      // Set font before wrap so text width calculation is correct
-      doc.setFontSize(12)
-      doc.setFont('helvetica', 'italic')
-      const iLines = wrap(prefix + instrText, contentWidth - 10)
-      iLines.forEach((line: string, i: number) => {
-        doc.text(line, margin + 5, yPos + i * 5.5)
-      })
-      yPos += iLines.length * 5.5 + 2
-
+      // No verbose instruction — Q header label is sufficient
       const sentences: string[] = question.sentences || []
+      doc.setFontSize(12)
       doc.setFont('helvetica', 'normal')
-      doc.setFontSize(11)
-      sentences.forEach((sentence, si) => {
-        checkPageBreak(6)
-        const sLines = wrap(`${si + 1}. ${sentence}`, contentWidth - 15)
-        sLines.forEach((line: string, li: number) => {
-          doc.text(line, margin + 10, yPos + li * 5)
+
+      // If sentences list, show them numbered
+      if (sentences.length > 0) {
+        const introLines = wrap(prefix, contentWidth - (ix - margin) - 10)
+        introLines.forEach((line: string, i: number) => {
+          doc.text(line, ix, yPos + i * 5.5)
         })
-        yPos += sLines.length * 5 + 2
-      })
+        yPos += introLines.length * 5.5 + 1
+        doc.setFontSize(11)
+        sentences.forEach((sentence, si) => {
+          checkPageBreak(6)
+          const sLines = wrap(`${si + 1}. ${sentence}`, contentWidth - (ix - margin) - 15)
+          sLines.forEach((line: string, li: number) => {
+            doc.text(line, ix + 5, yPos + li * 5)
+          })
+          yPos += sLines.length * 5 + 2
+        })
+      }
       yPos += 2
     }
 
-    // Render grammar correction group (instruction + sentence list with blank lines)
-    const addGrammarCorrectionItem = (question: any, subIdx: number) => {
+    // Render grammar correction group (sentence list with blank correction lines)
+    const addGrammarCorrectionItem = (question: any, _subIdx: number) => {
       checkPageBreak(12)
-      // Show instruction once (only for first item, caller handles this)
       const sentences: any[] = question.sentences || []
       if (sentences.length === 0) return
 
-      // Show instruction
-      if (subIdx === 0 && question.instruction) {
-        const instrLines = wrap(question.instruction, contentWidth - 10)
-        doc.setFontSize(10)
-        doc.setFont('helvetica', 'italic')
-        instrLines.forEach((line: string, i: number) => {
-          doc.text(line, margin + 5, yPos + i * 4.5)
-        })
-        yPos += instrLines.length * 4.5 + 4
-      }
-
+      // No instruction text — Q header label is sufficient
       // Each incorrect sentence + blank correction line
       sentences.forEach((sent: any, si: number) => {
-        checkPageBreak(14)
+        checkPageBreak(16)
         const incorrectText = `(${toRoman(si + 1)})  ${sent.incorrect || ''}`
-        const sLines = wrap(incorrectText, contentWidth - 10)
+        const sLines = wrap(incorrectText, contentWidth - (ix - margin) - 10)
         doc.setFontSize(12)
         doc.setFont('helvetica', 'normal')
         sLines.forEach((line: string, li: number) => {
-          doc.text(line, margin + 5, yPos + li * 5.5)
+          doc.text(line, ix, yPos + li * 5.5)
         })
         yPos += sLines.length * 5.5 + 2
         // Correction line
         doc.setLineWidth(0.2)
-        doc.line(margin + 5, yPos, pageWidth - margin - 5, yPos)
-        yPos += 8
+        doc.line(ix, yPos, pageWidth - margin - 5, yPos)
+        yPos += 10
       })
       yPos += 2
     }
 
-    // Render parts of speech group (instruction + sentences with identification line)
-    const addPartsOfSpeechItem = (question: any, subIdx: number) => {
+    // Render parts of speech group (sentences with identification line)
+    const addPartsOfSpeechItem = (question: any, _subIdx: number) => {
       checkPageBreak(12)
       const sentences: any[] = question.sentences || []
       if (sentences.length === 0) return
 
-      // Show instruction once for first item
-      if (subIdx === 0 && question.instruction) {
-        const instrLines = wrap(question.instruction, contentWidth - 10)
-        doc.setFontSize(10)
-        doc.setFont('helvetica', 'italic')
-        instrLines.forEach((line: string, i: number) => {
-          doc.text(line, margin + 5, yPos + i * 4.5)
-        })
-        yPos += instrLines.length * 4.5 + 4
-      }
-
+      // No instruction text — Q header label is sufficient
       sentences.forEach((sent: any, si: number) => {
-        checkPageBreak(14)
+        checkPageBreak(16)
         const sentText = `(${toRoman(si + 1)})  ${sent.sentence || ''}`
-        const sLines = wrap(sentText, contentWidth - 10)
+        const sLines = wrap(sentText, contentWidth - (ix - margin) - 10)
         doc.setFontSize(12)
         doc.setFont('helvetica', 'normal')
         sLines.forEach((line: string, li: number) => {
-          doc.text(line, margin + 5, yPos + li * 5.5)
+          doc.text(line, ix, yPos + li * 5.5)
         })
         yPos += sLines.length * 5.5 + 2
         // Answer line
         doc.setLineWidth(0.2)
-        doc.line(margin + 5, yPos, pageWidth - margin - 5, yPos)
-        yPos += 8
+        doc.line(ix, yPos, pageWidth - margin - 5, yPos)
+        yPos += 10
       })
       yPos += 2
     }
@@ -830,21 +876,7 @@ export async function generateExamPDF(
     // SECTION A: OBJECTIVE QUESTIONS
     // ───────────────────────────────────────────────
     if (exam.exam_content?.objective) {
-      const hasObjective = Object.entries(exam.exam_content.objective as Record<string, any>).some(([typeId, questions]) => {
-        const arr = Array.isArray(questions) ? questions : []
-        return arr.some((_, idx) => selectedQuestions.has(`obj-${typeId}-${idx}`))
-      })
-
-      if (hasObjective) {
-        checkPageBreak(14)
-        doc.setFontSize(14)
-        doc.setFont('helvetica', 'bold')
-        doc.text('SECTION A: OBJECTIVE QUESTIONS', pageWidth / 2, yPos, { align: 'center' })
-        yPos += 3
-        doc.setLineWidth(0.6)
-        doc.line(margin, yPos, pageWidth - margin, yPos)
-        yPos += 5
-      }
+      // Section A header removed — continuous flow per teacher feedback
 
       for (const [typeId, rawQuestions] of Object.entries(exam.exam_content.objective as Record<string, any>)) {
         const questionArray: any[] = Array.isArray(rawQuestions) ? rawQuestions : []
@@ -895,9 +927,21 @@ export async function generateExamPDF(
             case 'circle_correct_answer':
               addMCQItem(question, subIdx)
               break
-            case 'fill_in_blanks_from_word_bank':
-              addFillInBlanksItem({ question: question.blanks_sentence }, subIdx)
+            case 'fill_in_blanks_from_word_bank': {
+              // Show the word bank on a separate line before the blank sentence
+              const wordBank: string[] = question.word_bank || []
+              if (wordBank.length > 0 && subIdx === 0) {
+                checkPageBreak(8)
+                doc.setFontSize(11)
+                doc.setFont('helvetica', 'bold')
+                doc.text('Word Bank:', ix, yPos)
+                doc.setFont('helvetica', 'normal')
+                doc.text('  ' + wordBank.join('   |   '), ix + doc.getTextWidth('Word Bank:'), yPos)
+                yPos += 8
+              }
+              addFillInBlanksItem({ question: question.blanks_sentence, answer: question.answer }, subIdx)
               break
+            }
             case 'label_figures': {
               const imgId = `obj-label_figures-${filteredIndices[subIdx]}`
               addLabelFiguresItem(question, subIdx, questionImages[imgId])
@@ -922,21 +966,7 @@ export async function generateExamPDF(
     // SECTION B: SUBJECTIVE QUESTIONS
     // ───────────────────────────────────────────────
     if (exam.exam_content?.subjective) {
-      const hasSubjective = Object.entries(exam.exam_content.subjective as Record<string, any>).some(([typeId, questions]) => {
-        const arr = Array.isArray(questions) ? questions : []
-        return arr.some((_, idx) => selectedQuestions.has(`subj-${typeId}-${idx}`))
-      })
-
-      if (hasSubjective) {
-        checkPageBreak(14)
-        doc.setFontSize(14)
-        doc.setFont('helvetica', 'bold')
-        doc.text('SECTION B: SUBJECTIVE QUESTIONS', pageWidth / 2, yPos, { align: 'center' })
-        yPos += 3
-        doc.setLineWidth(0.6)
-        doc.line(margin, yPos, pageWidth - margin, yPos)
-        yPos += 5
-      }
+      // Section B header removed — continuous flow per teacher feedback
 
       for (const [typeId, rawQuestions] of Object.entries(exam.exam_content.subjective as Record<string, any>)) {
         const questionArray: any[] = Array.isArray(rawQuestions) ? rawQuestions : []
@@ -966,17 +996,7 @@ export async function generateExamPDF(
               break
             }
             case 'complete_sentences': {
-              // Show word bank first if available
-              if (question.instruction) {
-                checkPageBreak(8)
-                const instLines = wrap(question.instruction, contentWidth - 10)
-                doc.setFontSize(9)
-                doc.setFont('helvetica', 'italic')
-                instLines.forEach((line: string, i: number) => {
-                  doc.text(line, margin + 5, yPos + i * 4.5)
-                })
-                yPos += instLines.length * 4.5 + 3
-              }
+              // No instruction text — Q header label is sufficient
               const sentences: any[] = question.sentences || []
               sentences.forEach((sent, si) => addCompleteSentencesItem(sent, si))
               break
@@ -1001,9 +1021,10 @@ export async function generateExamPDF(
               addAnswerLinesItem(question, subIdx, 7)
               break
             case 'practice_questions_by_topic':
-            case 'real_life_story_problems':
-              // Use work space box (bordered grid) for math calculation questions
               addWorkSpaceItem(question, subIdx, question.requires_drawing ? 6 : 5)
+              break
+            case 'real_life_story_problems':
+              addStoryProblemItem(question, subIdx)
               break
             case 'grammar_correction':
               addGrammarCorrectionItem(question, subIdx)
@@ -1037,7 +1058,7 @@ export async function generateExamPDF(
 
       doc.setFontSize(11)
       doc.setFont('helvetica', 'normal')
-      doc.text(`Subject: ${exam.subject}  |  Class: ${gradeToRoman(String(exam.grade || ''))}  |  Date: ${new Date().toLocaleDateString()}`, pageWidth / 2, yPos, { align: 'center' })
+      doc.text(`Subject: ${exam.subject}  |  Class: ${gradeToRoman(String(exam.grade || '').replace(/^class\s*/i, ''))}  |  Date: ${new Date().toLocaleDateString()}`, pageWidth / 2, yPos, { align: 'center' })
       yPos += 10
 
       let akQNum = 0
@@ -1052,10 +1073,12 @@ export async function generateExamPDF(
       }
 
       const renderAKAnswer = (answer: any): string => {
-        if (!answer) return 'N/A'
         if (typeof answer === 'boolean') return answer ? 'True' : 'False'
+        if (answer === null || answer === undefined || answer === '') return 'N/A'
+        if (typeof answer === 'string' && answer.toLowerCase() === 'true') return 'True'
+        if (typeof answer === 'string' && answer.toLowerCase() === 'false') return 'False'
         if (typeof answer === 'object' && !Array.isArray(answer)) {
-          return Object.entries(answer).map(([k, v]) => `${k} → ${v}`).join(', ')
+          return Object.entries(answer).map(([k, v]) => `${k} -> ${v}`).join(', ')
         }
         if (Array.isArray(answer)) return answer.join(', ')
         return String(answer)
@@ -1063,11 +1086,6 @@ export async function generateExamPDF(
 
       // Objective answers
       if (exam.exam_content?.objective) {
-        doc.setFontSize(12)
-        doc.setFont('helvetica', 'bold')
-        doc.text('Section A: Objective Questions', margin, yPos)
-        yPos += 7
-
         for (const [typeId, rawQuestions] of Object.entries(exam.exam_content.objective as Record<string, any>)) {
           const questionArray: any[] = Array.isArray(rawQuestions) ? rawQuestions : []
           const filteredIndices = questionArray.map((_, i) => i).filter(i => selectedQuestions.has(`obj-${typeId}-${i}`))
@@ -1100,12 +1118,6 @@ export async function generateExamPDF(
 
       // Subjective answers
       if (exam.exam_content?.subjective) {
-        checkPageBreak(12)
-        doc.setFontSize(12)
-        doc.setFont('helvetica', 'bold')
-        doc.text('Section B: Subjective Questions', margin, yPos)
-        yPos += 7
-
         for (const [typeId, rawQuestions] of Object.entries(exam.exam_content.subjective as Record<string, any>)) {
           const questionArray: any[] = Array.isArray(rawQuestions) ? rawQuestions : []
           const filteredIndices = questionArray.map((_, i) => i).filter(i => selectedQuestions.has(`subj-${typeId}-${i}`))

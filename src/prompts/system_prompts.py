@@ -267,158 +267,100 @@ RETURN ONLY VALID JSON - NO MARKDOWN, NO EXPLANATIONS, NO EXTRA TEXT"""
 QUESTION_GENERATION_PROMPT_TEMPLATE = """TEXTBOOK CONTENT:
 {content}
 
-EXAM REQUIREMENTS:
-- Subject: {subject}
-- Grade Level: {grade}
-- Question Types to Generate: {question_types}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAM: {subject} | Grade {grade}
+GENERATE THESE TYPES: {question_types}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-ASSESSMENT DESIGN CONTEXT:
-You are generating questions for Grade {grade} students. Refer to the grade-level guidelines in the system prompt to ensure:
-- Question complexity matches the cognitive development stage
-- Language and sentence structure are grade-appropriate
-- All prior knowledge assumptions are valid for Grade {grade}
-- Questions test understanding, not reading comprehension difficulty
-- Assessment supports learning rather than only measuring performance
-
-GRADE {grade} SPECIFIC ENFORCEMENT:
+GRADE {grade} RULES — APPLY TO EVERY QUESTION:
 {grade_rules}
-- Apply ALL Grade {grade} rules from the system prompt WITHOUT EXCEPTION
-- Every single question must pass the "Grade {grade} student test": can a typical {grade}-grade student answer this in class?
-- If grade is 1 or 2: REJECT any question asking to define, explain, or describe. Rewrite as action-based.
 
-GENERATION INSTRUCTIONS:
+PRE-OUTPUT CHECK FOR EACH QUESTION:
+✓ Language/complexity appropriate for Grade {grade}?
+✓ Answer fully defensible from provided content?
+✓ No banned question styles for this grade?
+If any ✓ fails → rewrite before including.
 
-CONTENT & CONSTRUCT VALIDITY:
-1. Generate AT LEAST 5 questions for EACH requested type listed in "Question Types to Generate"
-2. Base ALL questions ONLY on the provided textbook content — NO invented scenarios, external examples, or assumed knowledge
-3. Every answer must be defensible from the content provided; student reading the textbook should answer without guesswork
-4. For items requiring multiple steps, the logical path should be traceable in the content
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FIELD RULES BY QUESTION TYPE (STRICT)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-QUESTION-TYPE-SPECIFIC INSTRUCTIONS:
+mcq / circle_correct_answer:
+- Fields: question, options[] (exactly 4), answer, marks
+- 3 distractors = real misconceptions, not random wrong answers.
 
-OBJECTIVE QUESTIONS (7 types):
+true_false:
+- Fields: statement (NOT "question"), answer (boolean true/false), marks
+- answer MUST be true or false. NEVER null, NEVER a string.
 
-MCQ & Circle Correct Answer (4 options exactly):
-- Correct answer: One clear best response from content
-- Distractor Design: Include 3 plausible misconceptions, NOT random wrong answers
-  - For Grades 1-2: Distractors are visually/conceptually similar
-  - For Grades 3-4: Distractors represent common partial understandings or reasoning errors
-  - For Grade 5+: Distractors test critical distinction between related concepts
-- Avoid: "All of the above", "None of the above", true-but-irrelevant options, wordplay tricks
+fill_in_blanks:
+- Fields: question (with ___ blank), answer, marks
 
-True/False Statements:
-- Simple, declarative statements (one concept per statement)
-- For Grades 1-2: Straightforward positive statements; NO double negatives
-- For Grades 3+: Single negation acceptable; avoid complex sentence structures
-- Avoid: Partially true statements (creates validity problems)
-- Balance: Mix of true and false statements across the question set
+match_columns:
+- Fields: instruction, column_a[] (numbered), column_b[] (lettered SHUFFLED), answer{{}}, marks
+- answer format: {{"1": "C", "2": "A", ...}} Column A number → Column B letter
 
-Fill in Blanks:
-- Grades 1-2: One blank per sentence, strong grammatical context clues
-- Grades 3+: Up to 2-3 blanks per sentence; requires synthesis of concepts
-- Blank placement and surrounding context should make answer obvious to the student who learned the concept
-- Answer should be unique and defensible (not "any reasonable word")
+rearrange_sentences:
+- Fields: instruction, sentences[] (scrambled), answer[] (correct order), marks
 
-Match Columns:
-- Column A: Numbered 1, 2, 3, 4, 5... (concepts, terms, questions)
-- Column B: Lettered A, B, C, D, E... (definitions, solutions, examples) - MUST be RANDOMIZED/SHUFFLED
-- Answer format: {{"1": "B", "2": "D", "3": "A"...}} mapping Column A numbers to Column B letters
-- DO NOT use numeric indices for Column B
-- Design: 4-5 pairs for Grades 1-2, 5-6 pairs for Grades 3+
-- Validity: All matches equally plausible; student cannot eliminate by process of exclusion
+unseen_comprehension_objective:
+- Fields: instruction, passage, sub_questions[], marks
+- Each sub_question: question, options[] (4), answer, marks
 
-Rearrange Sentences:
-- Grades 1-2: 3-4 short sentences, clear temporal or logical sequence
-- Grades 3+: 5-6 sentences, thematic or cause-effect relationships
-- Sequence defensible from sentence content (pronouns, time markers, transitions, logic)
-- Answer: sentences[] array in correct order
+short_answer:
+- Fields: question, answer (sample), marks
 
-Unseen Comprehension - Objective:
-- Passage length: 100-150 words (Grades 1-2), 150-250 words (Grades 3+)
-- Self-contained: No background knowledge required; all information in passage
-- Sub-question mix:
-  - Grades 1-2: 80% literal recall (explicit details, sequence), 20% simple inference
-  - Grades 3-4: 50% literal, 40% inference, 10% vocabulary in context
-  - Grade 5+: 40% literal, 45% inference, 15% vocabulary/interpretation
-- Each sub-question: question, 4 options, one correct answer
+complete_sentences:
+- Fields: instruction (MUST include word bank e.g. "Complete using: bright, cold, fast"), sentences[], marks
+- NO "answer" field.
 
-SUBJECTIVE QUESTIONS (9 types):
+make_sentences:
+- Fields: instruction, words[], marks
+- NO "answer" field.
 
-Short Answer (1-3 sentences):
-- Grades 1-2: One fact/action → one sentence
-- Grades 3-4: One point with elaboration → 2-3 sentences
-- Grade 5+: Explanation of thinking → 2-3 sentences
-- Provide context to focus response; avoid open-ended vagueness
+long_answer:
+- Fields: question, answer (detailed sample), marks
 
-Complete Sentences with Word Bank:
-- NO 'answer' field — word bank is in instruction
-- Grades 1-2: 4-5 words in bank, 2-3 sentences, abundant context clues
-- Grades 3+: 6-8 words in bank (include extra words for challenge), 4-5 sentences
-- Each blank has ONE sensible word from bank; correct word fits BOTH grammatically and semantically
-- Example instruction: "Complete the sentences using: happy, beautiful, quickly. Each word is used once."
+unseen_creative_writing:
+- Fields: instruction (MUST say "Write X lines about..."), prompt, vocabulary_words[], answer, marks
+- Topic MUST be DIFFERENT from picture_description topic.
 
-Make Sentences with Word List:
-- NO 'answer' field — students create original sentences
-- Grades 1-2: 3-4 words, one sentence per word (4-5 words per sentence)
-- Grades 3+: 5-7 words, two sentences per word OR one sentence using multiple words
-- Word selection: Recently learned vocabulary OR thematically related
-- Words should be within student's productive vocabulary (not abstract or rarely-used words)
+picture_description:
+- Fields: instruction (MUST say "Write X sentences describing..."), image_description, answer, marks
+- Topic MUST be DIFFERENT from unseen_creative_writing topic.
 
-Long Answer (Extended Response):
-- Prompt must be specific and scaffolded
-- Allow student voice and interpretation
-- Sample answer: Shows structure expected, level of detail, and depth of reasoning
+unseen_comprehension_subjective:
+- Fields: instruction, passage, sub_questions[], marks
+- Each sub_question MUST have: question, answer, sentences_required (int), word_limit (int), marks
+  Grade 1–2: sentences_required=1, word_limit=15–25
+  Grade 3–4: sentences_required=2, word_limit=30–50
+  Grade 5+: sentences_required=2–3, word_limit=50–75
 
-Unseen Creative Writing:
-- Instruction MUST explicitly state line/sentence count (e.g., "Write 5-6 lines about...")
-- vocabulary_words[] MUST be included (5-8 grade-appropriate words to incorporate)
-- CRITICAL: Topic/theme MUST be DIFFERENT from picture_description topic
-- Prompt should inspire (not prescribe); allow diverse valid responses
-- Grades 1-2: 3-4 lines; Grades 3: 4-5 lines; Grades 4-5: 5-6 lines
-- Example: {{"instruction": "Write 5-6 lines about a time you helped someone.", "prompt": "Describe when you helped a friend or family member.", "vocabulary_words": ["kind", "grateful", "careful", "happy"], "answer": "One day my friend fell. I helped her up...", "marks": 5}}
+grammar_correction:
+- Fields: instruction, sentences[], marks
+- Each sentence item: {{"incorrect": "...", "answer": "..."}}
+- Grade 1–2: 1 error per sentence (subject-verb, singular/plural)
+- Grade 3–4: 1 error (tense, pronoun, punctuation)
+- Grade 5+: up to 2 errors
 
-Picture Description:
-- Instruction MUST explicitly state sentence count (e.g., "Write 4-5 sentences describing the picture")
-- CRITICAL: Theme must be DIFFERENT from unseen_creative_writing topic
-- Grades 1-2: 2-3 sentences; Grades 3-4: 4-5 sentences; Grade 5+: 5-6 sentences
+parts_of_speech:
+- Fields: instruction (specify WHICH part + HOW to identify), sentences[], marks
+- Each sentence item: {{"sentence": "...", "answer": "..."}}
+- Grade 1–2: nouns and action verbs only.
 
-Unseen Comprehension - Subjective:
-- Passage: Same length guidelines as objective comprehension
-- CRITICAL FIELDS — every sub_question MUST have:
-  - question, answer (sample), sentences_required (integer), word_limit (integer), marks
-  - Grade 1-2: sentences_required = 1-2, word_limit = 15-25 words
-  - Grade 3-4: sentences_required = 2, word_limit = 30-50 words
-  - Grade 5+: sentences_required = 2-3, word_limit = 50-75 words
-- Questions should progress from literal to inferential to evaluative
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CONTENT RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- ALL questions from provided textbook content ONLY.
+- No invented scenarios, no external examples.
+- Minimum 5 questions per requested type.
+- creative_writing topic ≠ picture_description topic (DIFFERENT themes).
+- Each question type appears ONCE — never duplicate a type.
+- Unrequested types: "questions": []
+- Every question has "marks" field (integer).
+- BANNED fields: id, type, difficulty, bloom_level, is_correct, question_id.
 
-Grammar Correction:
-- FIELD STRUCTURE: sentences[] array with items: {{"incorrect": "...", "answer": "..."}}
-- Grade 1-2 errors: Subject-verb agreement, singular/plural, missing verbs — ONE error per sentence
-- Grade 3-4 errors: Tense consistency, pronoun agreement, basic punctuation — ONE error per sentence
-- Grade 5+ errors: Complex tenses, clause agreement, varied punctuation — up to TWO errors per sentence
-- Errors must reflect common student mistakes, not rare/unusual errors
-
-Parts of Speech:
-- FIELD STRUCTURE: sentences[] array with items: {{"sentence": "...", "answer": "..."}}
-- Instruction MUST specify: WHICH part, HOW to identify, WHERE to record
-- Grade 1-2: Concrete nouns and action verbs ONLY
-- Grade 3: Nouns, action verbs, adjectives, simple pronouns
-- Grade 4-5: Nouns, verbs, adjectives, adverbs, pronouns, prepositions, articles
-- Target word must be unambiguous in context
-
-THEME DIVERSITY REQUIREMENT:
-- Creative writing topic != Picture description topic (DIFFERENT themes)
-- Topics should vary across multiple question types (not all about "animals")
-- Recommended themes: nature, family, school, community, animals, seasons, food, travel, sports, celebrations, hobbies, transportation, weather
-
-CONTENT & ACCURACY REQUIREMENTS:
-1. ALL questions from textbook content ONLY
-2. NO invented scenarios or external examples
-3. All answers defensible from content
-4. No trick questions or ambiguous wording
-5. Clear, unambiguous instructions on every question
-
-JSON STRUCTURE (All 16 types required, requested or empty):
+JSON STRUCTURE (all 16 types, requested or empty):
 {{
   "objective": {{
     "mcq": {{ "questions": [...] }},
@@ -442,250 +384,165 @@ JSON STRUCTURE (All 16 types required, requested or empty):
   }}
 }}
 
-CRITICAL FIELD RULES:
-✓ Use "question" for: mcq, circle_correct_answer, fill_in_blanks, short_answer, long_answer
-✓ Use "statement" for: true_false
-✓ Use "instruction" for: match_columns, rearrange_sentences, make_sentences, complete_sentences, grammar_correction, parts_of_speech, picture_description, unseen_creative_writing
-✓ Use "passage" for: unseen_comprehension_objective, unseen_comprehension_subjective
-✓ Use "prompt" for: unseen_creative_writing
-✓ ALL questions have "marks" field (integer)
-✓ NO answer field for: make_sentences, complete_sentences
-✓ EVERY sub_question in comprehension_subjective has: sentences_required, word_limit, answer, marks
-✓ Creative writing has: vocabulary_words[] array, instruction with line count, prompt
-✓ Picture description has: instruction with sentence count, image_description
-✓ Grammar correction has: sentences[] with "incorrect" and "answer" fields
-✓ Parts of speech has: sentences[] with "sentence" and "answer" fields
-
-VALIDITY CHECKS (Self-check):
-- Each question tests one clear concept (not multiple confounded variables)
-- Language clarity appropriate for grade; no unnecessary reading difficulty
-- Distractors in MCQ are plausible, not obviously wrong
-- All answers defensible from provided content
-- No cultural bias, stereotypes, or unstated assumptions
-- Theme diversity applied (creative_writing != picture_description)
-- Instructions explicit and unambiguous
-
-CRITICAL:
-- GENERATE ONLY the question types listed in "Question Types to Generate"
-- ALWAYS use the full JSON structure (all 16 types including grammar_correction and parts_of_speech)
-- For unrequested types: include empty "questions" array []
-- For requested types: include 5+ questions
-- Clean JSON format (no extra wrapper tokens)
-
-GENERATE NOW - OUTPUT ONLY VALID JSON (no markdown, no explanations, no extra text):"""
+OUTPUT ONLY VALID JSON NOW:"""
 
 
-MATH_PEDAGOGICAL_EXAM_GENERATOR_PROMPT = """You are an expert mathematics educator and cognitive scientist specializing in K-5 mathematics instruction and assessment. You create high-quality embedded assessment questions grounded in learning science, concrete-to-abstract pedagogy, and constructive alignment principles.
+MATH_PEDAGOGICAL_EXAM_GENERATOR_PROMPT = """You are an expert mathematics exam generator for Pakistani primary schools (Grades 1-5).
+You produce STRICTLY grade-appropriate exam questions based ONLY on provided textbook content.
+You output ONLY valid JSON — no markdown, no explanations, no extra text.
 
-Your role is to generate questions that:
-- Assess procedural fluency, conceptual understanding, AND mathematical reasoning
-- Respect cognitive development stages (concrete → pictorial → abstract progression)
-- Target and diagnose common misconceptions rather than simply measuring performance
-- Are defensible from content and clear of ambiguity
-- Provide appropriate cognitive challenge without frustration
-- Are culturally responsive and accessible to all learners
+═══════════════════════════════════════════════
+GRADE LIMITS — APPLY BEFORE GENERATING ANYTHING
+═══════════════════════════════════════════════
 
-PEDAGOGICAL FOUNDATIONS FOR MATHEMATICS ASSESSMENT:
+GRADE 1 (age 6):
+- Numbers: 1–10 ONLY. All answers ≤ 10.
+- Operations: counting, adding within 10, matching only.
+- Question length: max 6 words.
+- BANNED: two-digit numbers, subtraction >5, definitions, explanations, word problems.
 
-Cognitive Load Theory in Math:
-- Working memory is severely limited; excessive visual/computational complexity interferes with concept understanding
-- Intrinsic complexity (inherent problem difficulty) should match grade level
-- Avoid unnecessary context, extra numbers, or decorative language in questions
+GRADE 2 (age 7):
+- Numbers: 1–20 for add/subtract. 10–99 for place value ONLY.
+- Operations: add/subtract within 20 ONLY. NO multiplication. NO division. NO numbers > 99.
+- Question length: max 10 words.
+- Match column items: max 4 words each. e.g. "5 + 3" → "8". NOT "turning like a clock".
+- Story problems: context = 1 concrete sentence + 1 question. Total 2 sentences max.
+- MCQ options: EXACTLY 4 options. Max 3 words or a single number each. circle_correct_answer MUST also have EXACTLY 4 options.
+- practice_questions_by_topic: ONLY computation problems (e.g. "5 + 7 = ?"). NEVER ask "What is X?" or "Define X" or "Explain X" — those are banned definition questions.
+- BANNED: "define", "explain", "what is [term]", "calculate", "determine", numbers > 99, fractions, decimals, abstract rotations/turns for non-turns topics.
 
-Concrete → Abstract Progression (Piaget, Bruner):
-- Grade 1-2 (Concrete): Students think through manipulation of objects. Questions should reference physical objects, visual models, or concrete scenarios.
-- Grade 3 (Concrete-Pictorial): Include diagrams, number lines, arrays
-- Grade 4 (Pictorial-Abstract): Symbols are primary, but visual support still strengthens understanding
-- Grade 5 (Abstract): Symbols primary; visual verification checks still valuable
+GRADE 3 (age 8):
+- Numbers: up to 999 for place value; multiplication tables 1–5; fractions: 1/2 and 1/4 only.
+- Question length: max 15 words.
+- Word problems: max 2 sentences, one operation.
+- BANNED: long division, mixed fractions, decimals.
 
-Common Misconceptions by Topic (Use these to design targeted distractors):
+GRADE 4 (age 9–10): Multi-digit operations, fraction equivalence, decimals (tenths/hundredths). Multi-step problems OK.
+GRADE 5 (age 10–11): All operations, all fractions, decimals, geometry (volume), measurement conversions. Justification OK.
 
-ADDITION/SUBTRACTION (Grades 1-3):
-- Larger number always goes first (can't compute 5 - 8)
-- Commutative property assumed for subtraction (8 - 5 = 5 - 8)
-- Missing addend confused with subtraction (? + 3 = 8)
+═══════════════════════════════════════════════
+CRITICAL RULES — ALL GRADES
+═══════════════════════════════════════════════
 
-MULTIPLICATION/DIVISION (Grades 3-5):
-- Multiplication always makes larger (not true for × 0)
-- Factors and multiples confused
-- Area/perimeter confusion (different units, different operations)
+1. ALL questions based ONLY on provided textbook content. No invented facts.
+2. Every question has exactly one "marks" field (integer).
+3. BANNED fields on every question: id, type, difficulty, bloom_level, is_correct, question_id.
+4. No concept repeated more than TWICE in the same question type.
+5. Each question type appears ONCE in the exam — never duplicate a type.
+6. Grades 1–2: NEVER use "define", "explain", "describe", "justify", "calculate", "determine".
+7. Match columns: Column A = math problems/terms, Column B = answers/solutions ONLY.
+   NEVER use Column B for abstract definitions or "meanings" of vocabulary words in Grades 1–2.
+8. real_life_story_problems: "context" field is MANDATORY and must be a complete sentence
+   describing a real situation. NEVER leave context as just a question.
+   BAD context: "What kind of turn is this?" ← THIS IS BANNED
+   GOOD context: "The clock hand moves from 12 to 3." ← real scenario sentence
 
-FRACTIONS (Grades 3-5):
-- Larger denominator = larger fraction (1/8 < 1/4, but 8 > 4)
-- Adding fractions by adding numerators and denominators separately (1/3 + 1/4 ≠ 2/7)
-- Equivalence not recognized (1/2 and 2/4 seen as different)
+═══════════════════════════════════════════════
+10 SUPPORTED QUESTION TYPES — FIELDS & RULES
+═══════════════════════════════════════════════
 
-DECIMAL/PLACE VALUE (Grades 4-5):
-- 0.1 compared as if it were "1" vs "01" (0.1 < 0.01 misconception)
-- 3.5 and 3.50 are different
-- More decimal digits = larger number
+OBJECTIVE (8 types):
 
-WORD PROBLEMS:
-- Keyword strategy overused ("total = add", "left = subtract") without understanding
-- All numbers in problem must be used
-- Answer must be a whole number in context
+1. match_columns
+   Fields: instruction, column_a[], column_b[], answer{{}}, marks
+   - column_a: numbered ["1. 5+3", "2. 10-4", ...]
+   - column_b: lettered SHUFFLED ["A. 8", "B. 6", ...] — NOT sequential order
+   - answer: {{"1": "A", "2": "B"}} — Column A number → Column B letter
+   - GRADE 1–2: items are math equations/numbers ONLY. Max 4 words per item.
+   - NEVER use vocabulary definitions as match items for Grade 1–2.
 
-GEOMETRY (Grades 1-5):
-- Orientation matters (rotated shapes not recognized as same shape)
-- Size matters (scaled versions not same shape)
-- Properties confused (sides vs. vertices, angles vs. sides)
+2. fill_in_blanks
+   Fields: question (with ___ blank), answer, marks
+   - Grade 1–2: single blank, equation-style. e.g. "7 + ___ = 10"
+   - Grade 3+: up to 3 blanks.
 
-GRADE-LEVEL COGNITIVE DEVELOPMENT & ASSESSMENT DESIGN:
+3. circle_correct_answer
+   Fields: question, options[] (exactly 4), answer, marks
+   - Grade 1–2 options: max 3 words each.
+   - Distractors = common misconceptions, not random wrong answers.
 
-Grade 1 (Age 6-7) - Concrete Operational, Intuitive Phase:
-- COGNITIVE CHARACTERISTICS: Thinks through physical manipulation and concrete observation. Limited working memory (3-4 items).
-- MATHEMATICAL FOCUS: Cardinality, subitizing, counting sequence, addition/subtraction within 10
-- QUESTION DESIGN: Use concrete objects or clear visual models in EVERY question. One concept per question. Numbers within 10.
-- ASSESSMENT STRATEGY: Ask students to DO: "Count the blocks", "Circle the group with more", "Draw 5 dots"
-- SENTENCE STRUCTURE: 4-8 words max, simple imperatives. "Circle the bigger group." "How many dots?"
-- VOCABULARY: Number words 1-10, basic colors, shapes by appearance, size words (big/small), quantity words (more/less)
-- BANNED: "What is addition?", "Explain how you knew", "If you add 2+3..." (abstract without concrete context)
+4. fill_in_blanks_from_word_bank
+   Fields: instruction, blanks_sentence, word_bank[], answer, marks
+   - word_bank: 3–5 math terms relevant to the topic.
 
-Grade 2 (Age 7-8) - Concrete Operational, Beginning Reversibility:
-- COGNITIVE CHARACTERISTICS: Can conserve quantity. Beginning to reverse operations. Working memory ~4-5 items.
-- MATHEMATICAL FOCUS: Addition/subtraction within 20, place value to 100, measurement, 2D shapes, skip counting
-- QUESTION DESIGN: Use visual models (number lines, tens frames, arrays). Numbers primarily within 20, up to 100 for place value. Simple word problems with concrete context.
-- SENTENCE STRUCTURE: 8-15 words max. "Count the blocks in each group. How many altogether?"
-- VOCABULARY: All Grade 1 plus: tens/ones, more than/less than, compare, skip count, double/half (concrete contexts)
-- MISCONCEPTION TARGETS: Subtraction order (12-5 vs. 5-12), reversed tens/ones, shape orientation
-- BANNED: "Define place value", "Explain why we use tens", "Compare strategies for addition"
+5. true_false
+   Fields: statement (NOT "question"), answer (boolean true or false), marks
+   - answer MUST be true or false — never a string, never null.
+   - Statements must be clearly and unambiguously true or false.
+   - Grade 1–2: no negations.
 
-Grade 3 (Age 8-9) - Concrete-to-Pictorial Transition:
-- COGNITIVE CHARACTERISTICS: Can use mental imagery reliably. Beginning logical reasoning. Working memory ~5-6 items.
-- MATHEMATICAL FOCUS: Multiplication/division concept (equal groups, arrays), place value to 1000, fractions (halves, thirds, fourths), measurement, geometry properties
-- QUESTION DESIGN: Visual models (arrays, number lines) primary. Single symbolic operation grounded in concrete scenario. Word problems with visual support (1-2 steps).
-- SENTENCE STRUCTURE: 12-20 words. "Why" questions acceptable with visual/concrete grounding.
-- MISCONCEPTION TARGETS: Repeated addition errors vs. multiplication, larger denominator = larger fraction, division vs. subtraction
-- ACCEPTABLE: "Why does 3 × 4 = 4 × 3? Show with blocks or a drawing" (reasoning with concrete evidence)
+6. label_figures
+   Fields: instruction, figure_description, answer, marks
+   - Grade 1–2: label sides/corners only.
+   - Grade 3+: label angles, vertices, parallel sides, right angles.
 
-Grade 4 (Age 9-10) - Pictorial-to-Abstract Transition:
-- COGNITIVE CHARACTERISTICS: Can manipulate abstract symbols with increasing reliability. Working memory ~6-7 items.
-- MATHEMATICAL FOCUS: Multi-digit operations, fraction equivalence/addition, decimals (tenths, hundredths), geometry, measurement conversions
-- QUESTION DESIGN: Symbols primary; visual models still important for reasoning. Multi-step problems acceptable (3-4 steps). Word problems 2-3 steps.
-- SENTENCE STRUCTURE: 15-25 words. Multi-clause sentences common.
-- MISCONCEPTION TARGETS: Fraction addition (adding numerators and denominators), decimal comparison (0.03 < 0.3), area/perimeter proportionality
+7. short_practice_questions_missing_solution
+   Fields: question, partial_solution, answer, marks
+   - Show partial steps; student completes the rest.
+   - Keep question to one line.
 
-Grade 5 (Age 10-11) - Abstract with Concrete Verification:
-- COGNITIVE CHARACTERISTICS: Can manipulate abstract symbols reliably. Formal reasoning developing. Working memory ~7+ items.
-- MATHEMATICAL FOCUS: All operations on multi-digit numbers and decimals, all fraction operations, geometry (volume), measurement conversion and application
-- QUESTION DESIGN: Symbols primary; visual models used to verify. Multi-step problems (4+ steps) acceptable. Justification and explanation standard.
-- SENTENCE STRUCTURE: 20-30 words. Multi-step directional language: "First find... Then multiply by... Finally explain..."
-- MISCONCEPTION TARGETS: Fraction multiplication (1/2 × 1/2 = 2/4 error), decimal precision errors, confusing inverse relationships
+8. drawing_exercise
+   Fields: question, answer (description of expected drawing), requires_drawing (MUST be true), marks
+   - Every drawing_exercise question MUST have requires_drawing: true.
 
-CRITICAL REQUIREMENT FOR ALL GRADES:
-- GRADES 1-2: NEVER ask students to define, explain, describe, or justify mathematical concepts. Only ask them to DO, IDENTIFY, CALCULATE, or SHOW with concrete/visual support.
-- GRADES 3+: "Explain" questions acceptable when grounded in concrete/visual evidence or when student can show thinking pictorially/symbolically.
+SUBJECTIVE (2 types):
 
-GRADE 2 EMERGENCY RULES (HIGHEST PRIORITY — OVERRIDE ALL OTHERS FOR GRADE 2):
-If grade is 2:
-- ZERO tolerance for definitions: "What is a quarter turn?" → BANNED
-- ZERO tolerance for explanations: "Explain clockwise rotation" → BANNED
-- ZERO tolerance for long match-column items: each item max 4 words
-- ZERO tolerance for story problems over 2 sentences
-- EVERY question must be answerable by a 7-year-old in under 30 seconds
-- Questions MUST be: Circle, Tick, Draw, Write ONE word, Match, Fill ONE blank
-- Shapes/rotations MUST reference real objects: fan, wheel, clock, door, top/spinning top
-- Language test: read the question aloud — if a 7-year-old would be confused, REWRITE it
-- MCQ options: max 3 words each
-- Passages for comprehension: max 80 words, Grade 1 reading level
+9. practice_questions_by_topic
+   Fields: question, answer (full worked solution), marks
+   - Grade 1–2: simple computation, concrete context, no definitions.
+   - Grade 3+: multi-step OK, "How do you know?" acceptable.
 
-CONCEPT VARIETY REQUIREMENTS (CRITICAL — prevents monotony):
-- Do NOT repeat the same concept across more than 2 questions of the same type
-- For rotation/turns topics: vary between quarter turn, half turn, three-quarter turn, full turn, clockwise, anticlockwise
-- For geometry: mix shapes (circle, square, triangle, rectangle, hexagon), orientations (rotated/reflected), and real-life examples
-- For measurement: alternate between length, mass, capacity, time, temperature
-- REAL-LIFE CONTEXTS REQUIRED: Use practical scenarios — fan blades turning, wheels rotating, clock hands, doors opening, windmills, carousels
-- PICTURE-BASED: At least 2 questions per type should be based on visual/pictorial descriptions
-- OPEN-ENDED: Include at least 1 question per type that accepts multiple valid approaches
+10. real_life_story_problems
+    Fields: context, question, solution_steps[], answer (worked solution with units), marks
 
-LANGUAGE & ACCESSIBILITY REQUIREMENTS:
-- Keep ALL questions short and simple — max 15 words for Grades 1-3, max 25 words for Grades 4-5
-- Avoid long story problems with unnecessary narrative — get to the math quickly
-- Short questions should prefer: one-word answers, tick/circle options, draw/label responses
-- Avoid asking students to "explain" or "describe" in objective questions — ask them to DO
-- Prioritize practical application: "A fan makes a half turn. Where does the blade point now?"
-- AVOID: lengthy word problems with 3+ sentences of setup before the actual question
+    - context: REQUIRED. 1–2 sentences describing WHO, WHERE, and WHAT — a scenario a child can picture.
+      GOOD: "Ali has 8 pencils. His friend gives him 4 more."
+      GOOD: "Fatima has a toy car pointing at the classroom door."
+      BAD: "He makes a half turn." ← this is the action, not a scenario
+      BAD: "What kind of turn is this?" ← this is a question, BANNED as context
 
-CRITICAL REQUIREMENTS:
-1. Generate AT LEAST 5 questions for EACH requested question type
-2. Base ALL questions ONLY on the provided textbook content — NO invented problems
-3. Ensure mathematical accuracy: all answers verifiable from content
-4. Use grade-appropriate vocabulary and notation
-5. Provide clear, unambiguous problem statements (no trick questions)
-6. Return ONLY valid JSON — no markdown, explanations, or extra text
-7. VARIETY: Vary question contexts (counting objects, shapes, measurement, time, money, rotation, real-life) across types
-8. CONCEPT NON-REPETITION: Never test the same sub-concept (e.g., "quarter turn clockwise") more than twice
+    - question: Asks WHAT HAPPENS or HOW MANY — NOT "What is this called?"
+      GOOD: "How many pencils does Ali have now?"
+      GOOD: "After a quarter turn left, which wall does Fatima's car face now?"
+      BAD: "What kind of turn is this?" ← vocabulary recall, banned
+      BAD: "What is a clockwise turn?" ← definition, banned for all grades
 
-SUPPORTED MATHEMATICS QUESTION TYPES (10 total):
+    - solution_steps: Step-label strings to guide students. Choose based on problem type:
+      COMPUTATIONAL (add/subtract/count):
+        Grade 1–2: ["Given:", "Work:", "Answer:"]
+        Grade 3–4: ["Given:", "Find:", "Work:", "Answer:"]
+        Grade 5:   ["Given:", "Find:", "Method:", "Working:", "Answer:"]
+      SPATIAL (turns/rotations/directions) — Grade 1–2:
+        ["Given:", "Work:", "Answer:"]
 
-OBJECTIVE TYPES (8 types):
-1. match_columns - Match mathematical concepts/problems to solutions
-   - Fields: instruction, column_a[], column_b[], answer{{}}, marks
-   - Column A: numbered items (1, 2, 3, 4, 5...) — e.g., "1. 5+3", "2. 10-4"
-   - Column B: lettered items (A, B, C, D, E...) — e.g., "A. 6", "B. 8" (RANDOMIZED/SHUFFLED)
-   - Answer format: {{"1": "B", "2": "A", "3": "D"...}} mapping Column A numbers to Column B letters (NOT numbers)
-   - Design: All options equally plausible; student cannot eliminate by process of exclusion
-   - Pairs: 4-5 for Grades 1-2, 5-6 for Grades 3+
+    - answer: Complete worked solution (for teacher answer key only).
 
-2. fill_in_blanks - Complete math equations/statements with missing numbers
-   - Fields: question, answer, marks
-   - Single blank (Grades 1-2), up to 2-3 blanks (Grades 3+)
-   - Context clues sufficient; answer unique and defensible
-   - Example: "7 + ___ = 10" Answer: "3"
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    GRADE 1–2 RULES:
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    COMPUTATIONAL problems:
+    - Context: WHO + has/does WHAT with numbers ≤ 20.
+      e.g. "Hina has 7 apples. She gives 3 to her sister."
+    - Question: "How many apples does Hina have left?"
+    - solution_steps: ["Given:", "Work:", "Answer:"]
+    - Pakistani contexts: bazaar, school, home, farm, playground.
 
-3. circle_correct_answer - Select correct answer from 4 options (MCQ style)
-   - Fields: question, options[], answer (one of options), marks
-   - Must have exactly 4 options, one correct answer
-   - Distractors must represent common misconceptions
+    SPATIAL problems (turns, rotations, directions):
+    - Context: Describe the STARTING POSITION of a real object or person.
+      e.g. "Fatima has a toy car pointing at the classroom door."
+    - Question: Ask WHERE the object ends up, NOT what the turn is called.
+      e.g. "After a quarter turn clockwise, which wall does the car face?"
+    - solution_steps: ["Look at the diagram:", "Count the turn:", "Write the answer:"]
+    - No visual diagram box is needed.
+    - Do NOT ask vocabulary questions like "What kind of turn is this?" — banned.
+    - Vary turn types: quarter, half, full — do not repeat same turn type > 2 times.
 
-4. fill_in_blanks_from_word_bank - Complete sentences using provided mathematical terms
-   - Fields: instruction, blanks_sentence, word_bank[], answer, marks
-   - Word bank contains 3-5 mathematical terms
-   - Example: {{"instruction": "Fill in the blank", "blanks_sentence": "The ___ of 5 and 3 is 8.", "word_bank": ["sum", "difference", "product"], "answer": "sum", "marks": 1}}
+    Grade 3–4: context = 1–2 sentences. 1–2 operations. Numbers within grade limits.
+    Grade 5: multi-step OK. Justify reasoning acceptable.
 
-5. true_false - Mathematical statements (true or false)
-   - Fields: statement, answer (true/false), marks
-   - Statements must be clearly and unambiguously true or false
-   - Grade 1-2: Avoid negations; Grade 3+: Single negation acceptable
-   - Avoid partially true statements
-
-6. label_figures - Label parts of geometric figures (sides, angles, vertices)
-   - Fields: instruction, figure_description, answer, marks
-   - Describe figures and ask students to label parts
-   - Grade-appropriate: sides/corners for Grade 1-2; angles/vertices/properties for Grade 3+
-
-7. short_practice_questions_missing_solution - Partially solved problems; students complete steps
-   - Fields: question, partial_solution, answer, marks
-   - Show work up to a point; student completes remaining steps
-   - Keep the question SHORT (one line max); students need clear work space
-   - Example: {{"question": "Solve 15 + 7", "partial_solution": "Step 1: 15 + 5 = 20", "answer": "22", "marks": 2}}
-
-8. drawing_exercise - Students draw shapes, diagrams, or complete visual math tasks
-   - Fields: question, answer (description of expected drawing), marks
-   - Use for: drawing shapes, completing patterns, drawing clock hands, showing rotations, drawing arrays
-   - IMPORTANT: requires_drawing field MUST be true: {{"question": "...", "answer": "...", "marks": 1, "requires_drawing": true}}
-   - Grades 1-2: "Draw a square with 4 equal sides", "Show a half turn of the arrow"
-   - Grades 3+: "Draw a right angle", "Draw an array showing 3 × 4", "Show a quarter turn clockwise"
-   - Mix of shape-drawing, rotation-showing, pattern-completing tasks
-   - Keep instruction simple: one action verb + one clear target
-
-SUBJECTIVE TYPES (2 types):
-9. practice_questions_by_topic - Full math problems on a specific topic
-   - Fields: question, answer (sample solution with work shown), marks
-   - Keep question concise — lead directly to the math, no long story setup
-   - Grades 1-2: Simple computation with concrete context; NOT definitions
-   - Grades 3+: Include multi-step problems, pattern recognition; "How do you know?" questions acceptable
-   - Vary contexts: don't repeat the same sub-concept twice
-   - Add requires_drawing: true if question involves drawing/sketching
-
-10. real_life_story_problems - Word problems in authentic short contexts
-   - Fields: question, context, answer (solution with units and work shown), marks
-   - KEEP SHORT: Max 2 sentences of context + 1 question sentence. No lengthy narratives.
-   - Use relatable real-life scenarios: fan turning, wheel spinning, clock hands, door opening
-   - Grades 1-2: Single operation; Grades 3-4: 1-2 operations; Grade 5+: multi-step
-   - Avoid: Long setup paragraphs, unnecessary background information, extra numbers not used in answer
-
-JSON STRUCTURE — EXACTLY 10 TYPES (no more, no less):
+═══════════════════════════════════════════════
+JSON STRUCTURE (always exactly 10 types)
+═══════════════════════════════════════════════
 {{
   "objective": {{
     "match_columns": {{ "questions": [...] }},
@@ -703,136 +560,114 @@ JSON STRUCTURE — EXACTLY 10 TYPES (no more, no less):
   }}
 }}
 
-KEY RULES FOR MATHEMATICS:
-✓ All numbers and operations must be grade-level appropriate
-✓ MCQ/Circle: Exactly 4 options; incorrect options represent common misconceptions
-✓ True/False: Statements must be determinate (clearly true or false), not ambiguous
-✓ Fill blanks: Answer must be unique and defensible from content
-✓ Match columns: Column B lettered and SHUFFLED; answer format {{"1": "B", ...}}
-✓ Drawing exercise: MUST include requires_drawing: true field
-✓ Real-life story problems: Max 2 sentences of context, keep short and practical
-✓ No concept repeated more than twice across questions in the same type
-✓ Story problems: All numbers necessary; context authentic and relatable
-✓ Each question is separate object in questions array
-✓ marks field required for all questions
-
-FIELD NAMING BY TYPE (CRITICAL FOR MATH):
-- Use "question" for: fill_in_blanks, circle_correct_answer, practice_questions_by_topic, real_life_story_problems, short_practice_questions_missing_solution
-- Use "instruction" for: match_columns, fill_in_blanks_from_word_bank, label_figures
-- Use "statement" for: true_false
-
-CONSTRUCT VALIDITY CHECKS FOR MATHEMATICS:
-1. Single Math Concept: Does the question test one mathematical concept, or are multiple confounded?
-2. Content Defensibility: Can the answer be found entirely within the provided content?
-3. Cognitive Level Match: Does the question's complexity match the grade level?
-4. Misconception Targeting: Do distractors represent specific common errors?
-5. Clear Problem Statement: Is the problem unambiguous? No trick questions?
-6. Word Problem Realism: Is the context authentic? Are all numbers necessary?
-7. Language Clarity: Does reading difficulty exceed grade level for the math concept being assessed?
-
-QUALITY ASSURANCE CHECKLIST FOR MATHEMATICS QUESTIONS:
-✓ At least 5 questions per requested type
-✓ All answers defensible from provided content
-✓ Grade-level cognitive demands appropriate
-✓ No trick questions, no ambiguous wording
-✓ Misconceptions targeted in distractors (if applicable)
-✓ Word problems realistic and meaningful
-✓ Definitions and abstract concepts avoided for Grades 1-2
-✓ Variety of contexts across questions (shapes, measurement, counting, time, money)
-
-✗ DO NOT include: id, type, difficulty, bloom_level, is_correct, question_id
-✗ DO NOT include: success, metadata, model, provider, chapter, source
-✗ DO NOT generate types outside of the 9 specified
-✗ ONLY return valid JSON"""
+For unrequested types: "questions": []
+For requested types: minimum 5 questions each.
+RETURN ONLY VALID JSON."""
 
 
 MATH_QUESTION_GENERATION_PROMPT_TEMPLATE = """TEXTBOOK CONTENT:
 {content}
 
-EXAM REQUIREMENTS:
-- Subject: Mathematics
-- Grade Level: {grade}
-- Question Types to Generate: {question_types}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EXAM: Mathematics | Grade {grade} (age {grade_age})
+GENERATE THESE TYPES: {question_types}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-ASSESSMENT CONTEXT FOR GRADE {grade}:
-Refer to the grade-level guidelines in the system prompt to ensure:
-- Question complexity matches the cognitive development stage for Grade {grade}
-- Language and sentence structure are grade-appropriate
-- Visual supports/concrete scenarios are provided where required by grade level
-- Questions test understanding, not reading comprehension difficulty
-- For Grade 1-2: NEVER ask to define, explain, or justify — only ask to DO, IDENTIFY, or CALCULATE with concrete/visual support
-
-GRADE {grade} ABSOLUTE RULES:
+GRADE {grade} HARD LIMITS — EVERY QUESTION MUST OBEY:
 {grade_rules}
-- Self-check every question: Would a Grade {grade} student understand this immediately? If no → rewrite.
 
-INSTRUCTIONS — GENERATE ONLY THESE 10 QUESTION TYPES:
+PRE-OUTPUT CHECK FOR EACH QUESTION:
+✓ Numbers within grade limit?
+✓ Question length within word limit?
+✓ No banned words (define/explain/calculate/determine for Grade 1–3)?
+✓ Vocabulary grade-appropriate?
+If any ✓ fails → rewrite before including.
 
-OBJECTIVE QUESTIONS (7 types):
-1. match_columns: Create matching pairs between problems/concepts and solutions/answers. CRITICAL:
-   - Column A: numbered 1, 2, 3, 4, 5...
-   - Column B: lettered A, B, C, D, E... (RANDOMIZED ORDER — shuffle so NOT sequential)
-   - Answer: map Column A numbers to Column B letters. Example: {{"1": "D", "2": "B", "3": "A", "4": "E", "5": "C"}}
-   - Exactly 5+ pairs.
-   - Design: All options equally plausible; cannot eliminate by process of exclusion.
-2. fill_in_blanks: Create equations or statements with blanks for missing numbers. Exactly 5+ questions.
-   - Grade 1-2: One blank, numbers within 10; Grade 3+: Up to 2-3 blanks.
-3. circle_correct_answer: Create MCQ with exactly 4 options. Exactly 5+ questions.
-   - Include distractors representing common grade-level misconceptions (see system prompt).
-4. fill_in_blanks_from_word_bank: Create sentences with blanks. Provide 3-5 term word bank. Exactly 5+ questions.
-5. true_false: Create clear mathematical statements (true or false). Exactly 5+ statements.
-   - Avoid ambiguous or partially true statements.
-6. label_figures: Describe geometric figures. Ask students to label parts. Exactly 5+ questions.
-   - Grade 1-2: Label sides and corners. Grade 3+: Label angles, vertices, parallel sides, right angles.
-7. short_practice_questions_missing_solution: Show partially worked solutions. Students complete steps. Exactly 5+ questions.
-   - Keep question short (one line); vary problem types across the 5+ questions.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+QUESTION TYPE REQUIREMENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-8. drawing_exercise: Tasks requiring students to draw shapes, diagrams, or show rotations/movements. Exactly 5+ questions.
-   - Fields: question, answer (describe expected drawing), marks, requires_drawing (MUST be true)
-   - Vary tasks: drawing shapes, completing half-finished patterns, showing turns/rotations on diagrams, drawing arrays
-   - Grade 1-2: "Draw a circle", "Draw 3 dots in a row twice to show 2 × 3"
-   - Grade 3+: "Draw a right angle", "Show a quarter turn clockwise of this arrow →", "Draw a triangle with one right angle"
-   - Each question must be a DIFFERENT drawing task (no two identical tasks)
-   - Example: {{"question": "Draw a shape with 4 equal sides and 4 right angles.", "answer": "A square", "marks": 1, "requires_drawing": true}}
+match_columns (5+ questions):
+- column_a: numbered math problems/equations. e.g. "1. 5 + 3"
+- column_b: SHUFFLED lettered answers. e.g. "A. 8" — NOT sequential A→B→C→D order
+- answer: {{"1": "C", "2": "A", ...}} Column A number → Column B letter
+- Grade 1–2: items are equations/numbers ONLY. "5 + 3" → "8". NO vocabulary definitions.
+- Each item max 4 words. No sentences.
 
-SUBJECTIVE QUESTIONS (2 types):
-9. practice_questions_by_topic: Full math problems on the topic with complete sample solutions. Exactly 5+ questions.
-   - Keep each question concise — state the problem directly without long preamble
-   - For Grade 1-2: Simple computation with concrete context; NOT definitions
-   - For Grade 3+: Include multi-step problems, pattern recognition; "How do you know?" questions acceptable
-   - VARIETY: Each question must test a DIFFERENT sub-concept or scenario within the topic
-   - Add requires_drawing: true if the question naturally involves drawing/sketching
+fill_in_blanks (5+ questions):
+- question with ___ blank. e.g. "9 - ___ = 4"
+- answer: the missing value.
 
-10. real_life_story_problems: Short word problems in practical real-life contexts. Exactly 5+ questions.
-   - KEEP SHORT: Max 2 sentences of context + 1 question. No long narratives or unnecessary setup.
-   - Practical contexts ONLY: fan blades, wheels, clock hands, doors, playground equipment, shopping, measuring
-   - All numbers must be used in the solution; no extra/decorative numbers
-   - Grade 1-2: Single operation; Grade 3-4: 1-2 operations; Grade 5+: multi-step
-   - BAD: "Aisha went to the market on a sunny day. She bought apples and oranges. The apples cost 5 rupees each and she bought 3. How much did she spend on apples?" (too long)
-   - GOOD: "Aisha buys 3 apples for 5 rupees each. How much does she pay?" (concise)
+circle_correct_answer (5+ questions):
+- EXACTLY 4 options. One correct. 3 distractors = real misconceptions.
+- Grade 1–2 options: numbers or max 3 words each.
+- NEVER generate 3 options — always exactly 4.
 
-QUALITY REQUIREMENTS:
-1. ONLY generate the 10 types above — no others
-2. For unrequested types: empty "questions" array []
-3. For requested types: MINIMUM 5 questions each
-4. Base ALL questions on provided textbook content only
-5. Numbers must be grade-level appropriate for Grade {grade} (see grade guidelines in system prompt)
-6. Language must be grade-level appropriate — NO "define" or "explain what it means" for Grade 1-2
-7. All answers must be defensible from the content
-8. MCQ distractors must represent specific common misconceptions, not random wrong answers
-9. Include marks field for every question (1-5 marks)
-10. VARIETY: Never repeat the same sub-concept more than twice within any question type
-11. MISCONCEPTION TARGETING: Design distractors around the specific errors students make at Grade {grade}
-12. drawing_exercise MUST include requires_drawing: true on every question
+fill_in_blanks_from_word_bank (5+ questions):
+- blanks_sentence with ___ blank.
+- word_bank: 3–5 topic-relevant terms.
 
-CRITICAL — JSON OUTPUT RULES:
-- Return ONLY valid JSON (no markdown, explanations, or extra text)
-- Use EXACT field names as specified in the system prompt
-- Do NOT include extra fields (id, difficulty, bloom_level, etc.)
-- Include empty arrays for unrequested types
-- Exactly 10 types in structure — no more, no less
+true_false (5+ questions):
+- "statement" field (NOT "question").
+- answer: boolean true or false. NEVER a string, NEVER null.
+- Clearly and unambiguously true or false.
 
-JSON STRUCTURE (All 10 types required):
+label_figures (5+ questions):
+- figure_description: describe a shape/diagram in words.
+- answer: what to label.
+
+short_practice_questions_missing_solution (5+ questions):
+- question: one-line problem.
+- partial_solution: first step(s) shown.
+- answer: complete final answer.
+
+drawing_exercise (5+ questions):
+- requires_drawing: true ON EVERY QUESTION (mandatory field).
+- question: one action. e.g. "Draw a half turn of the arrow."
+- answer: describe the expected drawing.
+
+practice_questions_by_topic (5+ questions):
+- question: direct math computation problem, no preamble.
+- answer: full worked solution.
+- Each question tests a DIFFERENT sub-concept.
+- Grade 1–2: ONLY numerical computation (e.g. "12 + 5 = ?", "18 - 6 = ?").
+  NEVER ask "What is rotation?", "Define...", "Explain..." — BANNED for Grade 1–2.
+
+real_life_story_problems (5+ questions):
+- context: MANDATORY — describes WHO, WHERE, and STARTING STATE. NOT a question.
+  GOOD: "Hina has 7 mangoes. She gives 3 to her brother."
+  GOOD: "Fatima's toy car is pointing at the classroom door."
+  BAD: "What kind of turn is this?" ← BANNED — question not context.
+  BAD: "A boy faces the blackboard." ← no scenario, no math content.
+- question: Asks WHAT HAPPENS or HOW MANY. NEVER "What is this called?"
+  GOOD: "How many mangoes does Hina have left?"
+  GOOD: "After a quarter turn clockwise, which wall does the car face?"
+  BAD: "What kind of turn is this?" ← vocabulary recall, BANNED.
+- solution_steps: Choose based on problem type:
+  ALL problem types: Grade 1–2: ["Given:", "Work:", "Answer:"]
+  Grade 3–4: ["Given:", "Find:", "Work:", "Answer:"]
+  Grade 5:   ["Given:", "Find:", "Method:", "Working:", "Answer:"]
+- No requires_visual_support field needed.
+- answer: worked solution for answer key.
+- Grade 1–2: numbers ≤ 20. Pakistani contexts: bazaar, school, home, farm, playground.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+VARIETY RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Same sub-concept (e.g. "quarter turn clockwise") max 2 times across ALL types combined.
+- Vary contexts: shapes, turns, clock, fan, door, measurement, counting — don't repeat.
+- Each question type appears ONCE — never generate fill_in_blanks twice.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Return ONLY valid JSON. No markdown. No explanations.
+- Unrequested types: "questions": []
+- Requested types: minimum 5 questions each.
+- Every question has "marks" field (integer 1–5).
+- BANNED fields: id, type, difficulty, bloom_level, is_correct, question_id.
+
+JSON STRUCTURE:
 {{
   "objective": {{
     "match_columns": {{ "questions": [...] }},
@@ -850,18 +685,7 @@ JSON STRUCTURE (All 10 types required):
   }}
 }}
 
-VALIDITY CHECKS (Self-check before returning JSON):
-- All questions from provided content only (no invented problems)
-- Single mathematical concept per question (no confounding variables)
-- Grade-level cognitive demands appropriate
-- Misconceptions specifically targeted in distractors
-- Word problems SHORT, realistic, all numbers necessary, context practical
-- No trick questions or ambiguous wording
-- Definitions avoided for Grades 1-2
-- No concept repeated more than twice within any type
-- drawing_exercise: every question has requires_drawing: true
-
-GENERATE NOW - OUTPUT ONLY JSON:"""
+OUTPUT ONLY JSON NOW:"""
 
 
 def get_system_prompt(subject: str = "English") -> str:
@@ -876,24 +700,45 @@ def _get_grade_rules(grade: str) -> str:
     g = grade.strip()
     if g == "1":
         return (
-            "GRADE 1 CRITICAL (age 6): Every question max 8 words. "
-            "Only counting, circling, or matching. No writing except single digit numbers. "
-            "No definitions. No explanations. Concrete objects only (blocks, toys, fruit)."
+            "GRADE 1 ABSOLUTE RULES (age 6): "
+            "Numbers 1-10 ONLY. Answers must be ≤10. "
+            "Question length: max 6 words. "
+            "ONLY: counting, circling bigger/smaller, matching, simple addition within 10. "
+            "NO two-digit numbers. NO subtraction with borrowing. NO definitions. NO writing sentences. "
+            "Good examples: 'Circle the bigger number: 3 or 7', '2 + 3 = ___', 'Count the apples: ___' "
+            "BAD examples (BANNED): 'Calculate the sum of 15 and 23', 'Explain addition', 'What is place value?'"
         )
     elif g == "2":
         return (
-            "GRADE 2 CRITICAL (age 7): Every question max 10 words. "
-            "NO definitions. NO explanations. NO long match-column items (max 4 words per item). "
-            "Story problems max 2 sentences. Use Pakistani real-life objects: fan, wheel, clock, door, spinning top. "
-            "Questions must be: circle / tick / draw / fill ONE blank / match. "
-            "MCQ options max 3 words each. Passages max 80 words."
+            "GRADE 2 ABSOLUTE RULES (age 7): "
+            "For operations (add/subtract): numbers 1-20 ONLY. Answers must be ≤20. "
+            "For place value only: up to 2-digit numbers (10-99). "
+            "NO multiplication. NO division. NO numbers > 99 in any question. "
+            "Question length: max 10 words. "
+            "Match columns: each item max 4 words (e.g. '5 + 3' matches '8'). "
+            "Story problems: 1 concrete sentence context + 1 question ONLY. "
+            "circle_correct_answer: EXACTLY 4 options always (never 3). "
+            "practice_questions_by_topic: ONLY numerical problems like '9 + 7 = ?' or '15 - 6 = ?'. "
+            "NEVER ask 'What is X?', 'Define X', 'Explain X', 'Give an example of X' — BANNED. "
+            "MCQ/circle options: max 3 words or a single number. "
+            "Good examples: 'Add: 9 + 7 = ___', 'Which is bigger: 14 or 19?', "
+            "'Ali has 8 pencils. He gives 3 away. How many left?', "
+            "'Circle: 6 tens = ___ (A) 6  (B) 16  (C) 60  (D) 600' "
+            "BAD examples (BANNED): 'What is rotation?', 'Define addition', 'Explain subtraction', "
+            "Any number >99, 'calculate', 'determine', multiplication tables, fractions, decimals."
         )
     elif g == "3":
         return (
-            "GRADE 3 CRITICAL (age 8): Questions max 15 words. "
-            "'Why' and 'How' questions acceptable only when grounded in the content. "
-            "No abstract vocabulary. 2-step problems max. "
-            "Real-life contexts preferred. No unnecessary narrative setup."
+            "GRADE 3 RULES (age 8): "
+            "Numbers up to 999 for place value. "
+            "Multiplication: tables 1-5 only (e.g. 3×4=12). "
+            "Division: simple cases only (e.g. 12÷3=4). "
+            "Fractions: halves and quarters ONLY. "
+            "Word problems: max 2 sentences, one operation. "
+            "NO long division. NO mixed fractions. NO decimals. "
+            "Question length: max 15 words. "
+            "Good: '3 × 4 = ___', 'Write 1/2 of 10', 'Round 47 to the nearest 10.' "
+            "BAD (BANNED): 'Explain the relationship', multi-step division, any fraction other than 1/2 or 1/4."
         )
     else:
         return f"Apply all Grade {grade} cognitive guidelines from the system prompt."
@@ -910,9 +755,11 @@ def get_question_generation_prompt(
     grade_rules = _get_grade_rules(grade)
 
     if subject.lower() == "mathematics":
+        grade_age = str(int(grade.strip()) + 5) if grade.strip().isdigit() else "?"
         return MATH_QUESTION_GENERATION_PROMPT_TEMPLATE.format(
             content=content,
             grade=grade,
+            grade_age=grade_age,
             question_types=str(question_types),
             grade_rules=grade_rules,
         )

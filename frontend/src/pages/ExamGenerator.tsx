@@ -55,6 +55,7 @@ export default function ExamGenerator() {
   const [downloading, setDownloading] = useState(false)
   const [questionImages, setQuestionImages] = useState<Record<string, string>>({})
   const [totalMarksOverride, setTotalMarksOverride] = useState<string>('')
+  const [timeAllowed, setTimeAllowed] = useState<string>('')
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -219,7 +220,7 @@ export default function ExamGenerator() {
       }
       const filename = `${formData.subject}_Grade${formData.grade}_Exam_${new Date().toISOString().split('T')[0]}.pdf`
       const totalMarksVal = totalMarksOverride !== '' && !isNaN(parseInt(totalMarksOverride)) ? parseInt(totalMarksOverride) : undefined
-      await generateExamPDF(examData, selectedQuestions, { filename, includeAnswerKey: true, schoolName, totalMarksOverride: totalMarksVal }, questionImages)
+      await generateExamPDF(examData, selectedQuestions, { filename, includeAnswerKey: true, schoolName, totalMarksOverride: totalMarksVal, timeAllowed: timeAllowed.trim() || undefined }, questionImages)
     } catch (error) {
       setError('Failed to download PDF. Please try again.')
     } finally {
@@ -332,6 +333,41 @@ export default function ExamGenerator() {
     setEditingQuestion(null)
   }
 
+  const deleteQuestion = (questionId: string) => {
+    if (!examResult?.exam) return
+    const parts = questionId.split('-')
+    const category = parts[0]
+    const typeId = parts.slice(1, -1).join('-')
+    const index = parseInt(parts[parts.length - 1])
+
+    const updatedExam = { ...examResult.exam }
+    const section = category === 'obj' ? updatedExam.objective : updatedExam.subjective
+    if (!section || !Array.isArray(section[typeId])) return
+
+    section[typeId] = section[typeId].filter((_: any, i: number) => i !== index)
+
+    // Rebuild selectedQuestions for this type to fix indices
+    const prefix = `${category}-${typeId}-`
+    const newSelected = new Set<string>()
+    selectedQuestions.forEach(id => {
+      if (!id.startsWith(prefix)) {
+        newSelected.add(id)
+      }
+    })
+    // Re-add with shifted indices
+    section[typeId].forEach((_: any, i: number) => {
+      // Only add if the original question at the old index was selected
+      const oldIdx = i >= index ? i + 1 : i
+      if (selectedQuestions.has(`${prefix}${oldIdx}`)) {
+        newSelected.add(`${prefix}${i}`)
+      }
+    })
+
+    setExamResult({ ...examResult, exam: updatedExam })
+    setSelectedQuestions(newSelected)
+    if (editingQuestion?.startsWith(prefix)) setEditingQuestion(null)
+  }
+
   const updateEditedQuestion = (questionId: string, field: string, value: any) => {
     setEditedQuestions({
       ...editedQuestions,
@@ -365,6 +401,7 @@ export default function ExamGenerator() {
         onUpdateField={(field, value) => updateEditedQuestion(questionId, field, value)}
         questionImage={questionImages[questionId]}
         onImageUpload={['picture_description', 'label_figures', 'practice_questions_by_topic', 'real_life_story_problems'].includes(typeId) ? (file) => handleImageUpload(questionId, file) : undefined}
+        onDelete={() => deleteQuestion(questionId)}
       />
     )
   }
@@ -528,6 +565,20 @@ export default function ExamGenerator() {
                 value={schoolName}
                 onChange={(e) => setSchoolName(e.target.value)}
                 placeholder="e.g., Army Public School (APS)"
+                className="w-full h-11 px-4 bg-[var(--background-light)] border border-[var(--border)] rounded-[var(--radius-md)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
+              />
+            </div>
+
+            {/* Time Allowed */}
+            <div>
+              <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
+                Time Allowed
+              </label>
+              <input
+                type="text"
+                value={timeAllowed}
+                onChange={(e) => setTimeAllowed(e.target.value)}
+                placeholder="e.g., 1 Hour 30 Minutes"
                 className="w-full h-11 px-4 bg-[var(--background-light)] border border-[var(--border)] rounded-[var(--radius-md)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
               />
             </div>

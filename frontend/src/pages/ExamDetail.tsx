@@ -23,6 +23,7 @@ export default function ExamDetail() {
   const [downloading, setDownloading] = useState(false)
   const [schoolName, setSchoolName] = useState('')
   const [totalMarksOverride, setTotalMarksOverride] = useState<string>('')
+  const [timeAllowed, setTimeAllowed] = useState<string>('')
   // questionImages: maps questionId -> base64 data URL for Picture Description
   const [questionImages, setQuestionImages] = useState<Record<string, string>>({})
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -111,7 +112,7 @@ export default function ExamDetail() {
       await generateExamPDF(
         exam,
         selectedQuestions,
-        { filename, includeAnswerKey: true, schoolName: schoolName.trim() || undefined, totalMarksOverride: totalMarksVal },
+        { filename, includeAnswerKey: true, schoolName: schoolName.trim() || undefined, totalMarksOverride: totalMarksVal, timeAllowed: timeAllowed.trim() || undefined },
         questionImages
       )
     } catch (error) {
@@ -161,9 +162,6 @@ export default function ExamDetail() {
         {/* Objective Questions */}
         {exam.exam_content.objective && Object.keys(exam.exam_content.objective).length > 0 && (
           <div>
-            <h4 className="text-base font-bold text-[var(--text-primary)] mb-3 pb-2 border-b-2 border-[var(--primary)] uppercase tracking-wide">
-              Section A: Objective Questions
-            </h4>
             <div className="space-y-4">
               {Object.entries(exam.exam_content.objective).map(([typeId, questions]) => {
                 const questionArray = Array.isArray(questions) ? questions : []
@@ -296,9 +294,6 @@ export default function ExamDetail() {
         {/* Subjective Questions */}
         {exam.exam_content.subjective && Object.keys(exam.exam_content.subjective).length > 0 && (
           <div>
-            <h4 className="text-base font-bold text-[var(--text-primary)] mb-3 pb-2 border-b-2 border-purple-600 uppercase tracking-wide">
-              Section B: Subjective Questions
-            </h4>
             <div className="space-y-4">
               {Object.entries(exam.exam_content.subjective).map(([typeId, questions]) => {
                 const questionArray = Array.isArray(questions) ? questions : []
@@ -610,6 +605,16 @@ export default function ExamDetail() {
                       value={totalMarksOverride}
                       onChange={(e) => setTotalMarksOverride(e.target.value)}
                       className="w-20 px-2 py-1.5 text-sm border border-[var(--border)] rounded-lg bg-[var(--background-light)] text-center focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">Time:</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. 1 hour 30 min"
+                      value={timeAllowed}
+                      onChange={(e) => setTimeAllowed(e.target.value)}
+                      className="w-32 px-2 py-1.5 text-sm border border-[var(--border)] rounded-lg bg-[var(--background-light)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
                     />
                   </div>
                 </div>
