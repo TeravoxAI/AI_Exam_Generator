@@ -13,7 +13,7 @@ PEDAGOGICAL_EXAM_GENERATOR_PROMPT = """You are an expert educational assessment 
 - Use evidence-based question design principles
 
 CRITICAL REQUIREMENTS:
-1. Generate AT LEAST 5 questions for EACH requested question type
+1. Generate the correct number of questions per type as specified in EXAM SCALE LIMIT rules (3–5 depending on grade)
 2. Base ALL questions ONLY on the provided textbook content
 3. Use clear, age-appropriate language for the grade level
 4. Provide accurate, defensible answers from the content only
@@ -246,7 +246,7 @@ VALIDITY & ACCESSIBILITY CHECKS (Applied to all questions):
 - Bias Check: Are examples/contexts representative and relatable? Avoid stereotypes in names, situations, or descriptions.
 
 QUALITY ASSURANCE CHECKLIST (Self-check before returning JSON):
-1. All requested question types generated with 5+ questions each
+1. All requested question types generated with the EXACT count from EXAM SCALE LIMIT rules
 2. Unrequested types have empty questions[] array
 3. All field names match spec exactly
 4. All answers defensible from content
@@ -561,7 +561,7 @@ JSON STRUCTURE (always exactly 10 types)
 }}
 
 For unrequested types: "questions": []
-For requested types: minimum 5 questions each.
+For requested types: EXACTLY the count from EXAM SCALE LIMIT rules above.
 RETURN ONLY VALID JSON."""
 
 
@@ -663,8 +663,8 @@ OUTPUT RULES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 - Return ONLY valid JSON. No markdown. No explanations.
 - Unrequested types: "questions": []
-- Requested types: minimum 5 questions each.
-- Every question has "marks" field (integer 1–5).
+- Requested types: EXACTLY the count specified in EXAM SCALE LIMIT rules above.
+- Every question has "marks" field. Follow marks rules from EXAM SCALE LIMIT.
 - BANNED fields: id, type, difficulty, bloom_level, is_correct, question_id.
 
 JSON STRUCTURE:
@@ -744,6 +744,58 @@ def _get_grade_rules(grade: str) -> str:
         return f"Apply all Grade {grade} cognitive guidelines from the system prompt."
 
 
+def _get_grade_scale_rules(grade: str, question_types: dict) -> str:
+    """Return grade-specific question count and marks budget rules."""
+    g = int(grade.strip()) if grade.strip().isdigit() else 4
+
+    # Count how many types are requested
+    obj_types = [k for k, v in question_types.get("objective", {}).items() if v]
+    subj_types = [k for k, v in question_types.get("subjective", {}).items() if v]
+    total_types = len(obj_types) + len(subj_types)
+    if total_types == 0:
+        total_types = 1
+
+    if g <= 2:
+        qs_per_type = 3
+        marks_per_q = 1
+        total_budget = total_types * qs_per_type * marks_per_q
+        return (
+            f"EXAM SCALE LIMIT (GRADE {g} — SHORT PAPER): "
+            f"Generate EXACTLY {qs_per_type} questions per requested type (NOT 5). "
+            f"Each question: marks = 1 ONLY. "
+            f"Total exam marks should be approximately {total_budget}. "
+            f"DO NOT generate more than {qs_per_type} questions per type. "
+            f"This is a short classroom test, NOT a full-year exam."
+        )
+    elif g == 3:
+        qs_per_type = 4
+        marks_per_q = 1
+        total_budget = total_types * qs_per_type * marks_per_q
+        return (
+            f"EXAM SCALE LIMIT (GRADE {g}): "
+            f"Generate EXACTLY {qs_per_type} questions per requested type. "
+            f"Objective questions: marks = 1. Subjective: marks = 2. "
+            f"Total exam marks should be approximately {total_budget}. "
+            f"DO NOT exceed {qs_per_type} questions per type."
+        )
+    elif g == 4:
+        qs_per_type = 5
+        return (
+            f"EXAM SCALE LIMIT (GRADE {g}): "
+            f"Generate EXACTLY {qs_per_type} questions per requested type. "
+            f"Objective: marks = 1. Subjective: marks = 2-3. "
+            f"Keep total marks under 60."
+        )
+    else:  # Grade 5
+        qs_per_type = 5
+        return (
+            f"EXAM SCALE LIMIT (GRADE {g}): "
+            f"Generate EXACTLY {qs_per_type} questions per requested type. "
+            f"Objective: marks = 1. Subjective: marks = 3-5. "
+            f"Keep total marks under 100."
+        )
+
+
 def get_question_generation_prompt(
     content: str,
     subject: str,
@@ -753,6 +805,7 @@ def get_question_generation_prompt(
 ) -> str:
     """Generate a question generation prompt based on subject"""
     grade_rules = _get_grade_rules(grade)
+    scale_rules = _get_grade_scale_rules(grade, question_types)
 
     if subject.lower() == "mathematics":
         grade_age = str(int(grade.strip()) + 5) if grade.strip().isdigit() else "?"
@@ -761,7 +814,7 @@ def get_question_generation_prompt(
             grade=grade,
             grade_age=grade_age,
             question_types=str(question_types),
-            grade_rules=grade_rules,
+            grade_rules=grade_rules + "\n\n" + scale_rules,
         )
 
     return QUESTION_GENERATION_PROMPT_TEMPLATE.format(
@@ -769,5 +822,5 @@ def get_question_generation_prompt(
         subject=subject,
         grade=grade,
         question_types=str(question_types),
-        grade_rules=grade_rules,
+        grade_rules=grade_rules + "\n\n" + scale_rules,
     )

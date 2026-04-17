@@ -102,146 +102,136 @@ export async function generateExamPDF(
     }
 
     // ───────────────────────────────────────────────
-    // COVER PAGE
+    // COVER PAGE  (open layout — no box, like sample papers)
     // ───────────────────────────────────────────────
-    // School name header (editable by teacher)
     const displaySchoolName = (schoolName && schoolName.trim()) ? schoolName.trim().toUpperCase() : 'SCHOOL NAME'
     doc.setFontSize(16)
     doc.setFont('helvetica', 'bold')
     doc.text(displaySchoolName, pageWidth / 2, yPos, { align: 'center' })
-    yPos += 5
+    yPos += 9
 
-    doc.setLineWidth(1)
-    doc.line(margin, yPos, pageWidth - margin, yPos)
-    yPos += 5
-
-    // ── Single unified info box ──────────────────────────────────
-    //  Row 1: Subject | Class | Total Marks
-    //  Row 2: Date | Time Allowed
-    //  Row 3: Name | Roll No | Section  (all on one line)
-    //  Row 4: Instructions
-    const infoBoxH = 38
-    doc.setLineWidth(0.8)
-    doc.rect(margin, yPos, contentWidth, infoBoxH)
-
-    const bx = margin    // box left x
-    const pad = 3        // internal padding
-    const lh = 8         // line height between rows
-
-    // Light horizontal dividers
-    doc.setLineWidth(0.2)
-    doc.line(bx + pad, yPos + lh + 2,      bx + contentWidth - pad, yPos + lh + 2)
-    doc.line(bx + pad, yPos + lh * 2 + 3,  bx + contentWidth - pad, yPos + lh * 2 + 3)
-    doc.line(bx + pad, yPos + lh * 3 + 4,  bx + contentWidth - pad, yPos + lh * 3 + 4)
-
-    // Light vertical dividers for Row 1
-    const col1x = bx + contentWidth / 3
-    const col2x = bx + (contentWidth / 3) * 2
-    doc.line(col1x, yPos + 1, col1x, yPos + lh + 2)
-    doc.line(col2x, yPos + 1, col2x, yPos + lh + 2)
-
+    // Row 1 – Subject (left) | Total Marks (right)
     doc.setFontSize(12)
-
-    // Row 1 – Subject / Class / Total Marks
-    const row1y = yPos + lh - 1
     doc.setFont('helvetica', 'bold')
-    doc.text('Subject:', bx + pad + 1, row1y)
+    doc.text('Subject: ', margin, yPos)
     doc.setFont('helvetica', 'normal')
-    doc.text(exam.subject || '', bx + pad + 19, row1y)
-
+    doc.text(exam.subject || '', margin + doc.getTextWidth('Subject: '), yPos)
     doc.setFont('helvetica', 'bold')
-    doc.text('Class:', col1x + pad + 1, row1y)
+    doc.text(`Total Marks: [   /${totalMarks}]`, pageWidth - margin, yPos, { align: 'right' })
+    yPos += 7
+
+    // Row 2 – Class (left) | Date (centre) | Time (right)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Class: ', margin, yPos)
     doc.setFont('helvetica', 'normal')
-    doc.text(gradeToRoman(String(exam.grade || '').replace(/^class\s*/i, '')), col1x + pad + 14, row1y)
+    doc.text(gradeToRoman(String(exam.grade || '').replace(/^class\s*/i, '')), margin + doc.getTextWidth('Class: '), yPos)
 
     doc.setFont('helvetica', 'bold')
-    doc.text('Total Marks:', col2x + pad + 1, row1y)
+    const dateLabel = 'Date: '
+    const dateLabelW = doc.getTextWidth(dateLabel)
+    const dateCx = pageWidth / 2 - 15
+    doc.text(dateLabel, dateCx, yPos)
+    doc.setLineWidth(0.3)
+    doc.line(dateCx + dateLabelW, yPos + 1, dateCx + dateLabelW + 28, yPos + 1)
+
+    doc.setFont('helvetica', 'bold')
+    doc.text('Time: ', pageWidth - margin - 35, yPos)
     doc.setFont('helvetica', 'normal')
-    doc.text(String(totalMarks), col2x + pad + 26, row1y)
-
-    // Row 2 – Date / Time Allowed
-    const row2y = yPos + lh * 2
-    doc.setFont('helvetica', 'bold')
-    doc.text('Date:', bx + pad + 1, row2y)
-    doc.setLineWidth(0.2)
-    doc.line(bx + pad + 14, row2y + 1, col1x - 4, row2y + 1)
-
-    doc.setFont('helvetica', 'bold')
-    doc.text('Time Allowed:', col1x + pad + 1, row2y)
     if (timeAllowed) {
-      doc.setFont('helvetica', 'normal')
-      doc.text(timeAllowed, col1x + pad + 31, row2y)
+      doc.text(timeAllowed, pageWidth - margin - 35 + doc.getTextWidth('Time: '), yPos)
+    } else {
+      doc.setLineWidth(0.3)
+      doc.line(pageWidth - margin - 35 + doc.getTextWidth('Time: '), yPos + 1, pageWidth - margin, yPos + 1)
     }
-    doc.line(col1x + pad + 30, row2y + 1, bx + contentWidth - pad, row2y + 1)
+    yPos += 7
 
-    // Row 3 – Name | Roll No | Section  (all on one line)
-    // Layout: Name(~55% blank) | Roll No(~25% blank) | Section(~20% blank)
-    const row3y = yPos + lh * 3 + 1
-    const r3Left  = bx + pad + 1          // start of usable row area
-    const r3Right = bx + contentWidth - pad  // end of row = 187
-
-    // Name: label at r3Left, blank ends at ~57% across
-    const xNameLabel       = r3Left                            // 24
-    const xNameBlankStart  = xNameLabel + 13                   // 37
-    const xNameBlankEnd    = r3Left + (r3Right - r3Left) * 0.55 // ~113
-
-    // Roll No: label right after name blank, short blank (~20mm)
-    const xRollLabel       = xNameBlankEnd + 3                 // ~116
-    const xRollBlankStart  = xRollLabel + 18                   // ~134
-    const xRollBlankEnd    = xRollBlankStart + 20              // ~154
-
-    // Section: label right after roll blank, compact blank (~15mm)
-    const xSectionLabel      = xRollBlankEnd + 3               // ~157
-    const xSectionBlankStart = xSectionLabel + 19              // ~176
-    const xSectionBlankEnd   = r3Right                         // 187
+    // Row 3 – Name | Roll No | Section
+    doc.setFont('helvetica', 'bold')
+    doc.text('Name: ', margin, yPos)
+    doc.setLineWidth(0.3)
+    const nameBlankStart = margin + doc.getTextWidth('Name: ')
+    const nameBlankEnd   = margin + 65
+    doc.line(nameBlankStart, yPos + 1, nameBlankEnd, yPos + 1)
 
     doc.setFont('helvetica', 'bold')
-    doc.text('Name:', xNameLabel, row3y)
-    doc.setLineWidth(0.2)
-    doc.line(xNameBlankStart, row3y + 1, xNameBlankEnd, row3y + 1)
+    const rollX = nameBlankEnd + 5
+    doc.text('Roll No. ', rollX, yPos)
+    const rollBlankStart = rollX + doc.getTextWidth('Roll No. ')
+    const rollBlankEnd   = rollBlankStart + 22
+    doc.line(rollBlankStart, yPos + 1, rollBlankEnd, yPos + 1)
 
     doc.setFont('helvetica', 'bold')
-    doc.text('Roll No:', xRollLabel, row3y)
-    doc.line(xRollBlankStart, row3y + 1, xRollBlankEnd, row3y + 1)
+    const secX = rollBlankEnd + 5
+    doc.text('Section: ', secX, yPos)
+    const secBlankStart = secX + doc.getTextWidth('Section: ')
+    doc.line(secBlankStart, yPos + 1, pageWidth - margin, yPos + 1)
+    yPos += 9
 
-    doc.setFont('helvetica', 'bold')
-    doc.text('Section:', xSectionLabel, row3y)
-    doc.line(xSectionBlankStart, row3y + 1, xSectionBlankEnd, row3y + 1)
-
-    // Row 4 – Instructions
-    const row4y = yPos + infoBoxH - 4
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'bold')
-    doc.text('Instructions: ', bx + pad + 1, row4y)
-    doc.setFont('helvetica', 'normal')
-    doc.text('Read all questions carefully. Write answers neatly. Check your work before submitting.', bx + pad + 28, row4y)
-
-    yPos += infoBoxH + 4
-
-    // Separator
-    doc.setLineWidth(0.8)
+    // Double horizontal rule separator
+    doc.setLineWidth(1.2)
     doc.line(margin, yPos, pageWidth - margin, yPos)
-    yPos += 5
+    yPos += 2.5
+    doc.setLineWidth(0.4)
+    doc.line(margin, yPos, pageWidth - margin, yPos)
+    yPos += 6
+
+    // Note line (outside box, after separator — like samples)
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Note: ', margin, yPos)
+    doc.setFont('helvetica', 'normal')
+    doc.text("Read questions carefully, don't over write and check your work.", margin + doc.getTextWidth('Note: '), yPos)
+    yPos += 8
 
     // ───────────────────────────────────────────────
     // QUESTION RENDERING HELPERS
     // ───────────────────────────────────────────────
     let questionNum = 0
-    const ix = margin  // sub-items align flush with Q header — no indent
+    let ix = margin  // updated per question group to align sub-items under label text
 
-    // Draw a question group header (Q1. True / False  (5))
-    const addGroupHeader = (typeId: string, totalTypeMarks: number) => {
+    // Helper: build marks display string — [0.5×4= /2] if uniform per-item, else [  /total]
+    const buildMarksDisplay = (qs: any[], total: number): string => {
+      if (qs.length > 0) {
+        const perItem = qs[0]?.marks
+        if (perItem && qs.every((q: any) => q.marks === perItem)) {
+          return `[${formatMarks(perItem)}×${qs.length}=  /${formatMarks(total)}]`
+        }
+      }
+      return `[   /${formatMarks(total)}]`
+    }
+
+    // Draw a question group header: Q1.  Fill in the Blanks    [0.5×4= /2]
+    const addGroupHeader = (typeId: string, totalTypeMarks: number, marksDisplay?: string) => {
       questionNum++
       checkPageBreak(12)
       const label = TYPE_LABELS[typeId] || typeId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
       doc.setFontSize(13)
       doc.setFont('helvetica', 'bold')
-      doc.text(`Q${questionNum}.  ${label}`, margin, yPos)
+      const qPrefix = `Q.${questionNum}.  `
+      ix = margin + doc.getTextWidth(qPrefix)  // sub-items align under first letter of label
+      doc.text(`${qPrefix}${label}`, margin, yPos)
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(13)
-      const marksText = `[   /${formatMarks(totalTypeMarks)}]`
+      const marksText = marksDisplay ?? `[   /${formatMarks(totalTypeMarks)}]`
       doc.text(marksText, pageWidth - margin, yPos, { align: 'right' })
       yPos += 9
+    }
+
+    // Render an inline image (centered between ix and right margin)
+    const addInlineImage = (imageData: string, imgW = 55, imgH = 42) => {
+      checkPageBreak(imgH + 6)
+      const imgX = ix + (contentWidth - (ix - margin) - imgW) / 2
+      doc.setLineWidth(0.3)
+      doc.rect(imgX, yPos, imgW, imgH)
+      try {
+        doc.addImage(imageData, 'JPEG', imgX, yPos, imgW, imgH)
+      } catch {
+        doc.setFontSize(8)
+        doc.setTextColor(150, 150, 150)
+        doc.text('[Image]', imgX + imgW / 2, yPos + imgH / 2, { align: 'center' })
+        doc.setTextColor(0, 0, 0)
+      }
+      yPos += imgH + 4
     }
 
     // Render a passage block
@@ -279,9 +269,10 @@ export async function generateExamPDF(
     }
 
     // Render True/False sub-item (statement on left, two empty boxes on right — no T/F labels)
-    const addTrueFalseItem = (statement: string, subIdx: number) => {
+    const addTrueFalseItem = (statement: string, subIdx: number, imageData?: string) => {
       checkPageBreak(10)
-      const prefix = `(${toRoman(subIdx + 1)})  `
+      const prefix = `${toRoman(subIdx + 1)})  `
+      if (imageData) addInlineImage(imageData, 50, 38)
       doc.setFontSize(12)
       doc.setFont('helvetica', 'normal')
       const stmtLines = wrap(prefix + statement, contentWidth - 28 - (ix - margin))
@@ -296,10 +287,10 @@ export async function generateExamPDF(
       yPos += stmtLines.length * 5.5 + 2
     }
 
-    // Render MCQ/Circle sub-item
-    const addMCQItem = (question: any, subIdx: number) => {
+    // Render MCQ sub-item — vertical option list (one per line), good for math equations
+    const addMCQItem = (question: any, subIdx: number, imageData?: string) => {
       checkPageBreak(25)
-      const prefix = `(${toRoman(subIdx + 1)})  `
+      const prefix = `${toRoman(subIdx + 1)})  `
       const qText = question.question || question.statement || ''
       const qLines = wrap(prefix + qText, contentWidth - (ix - margin) - 10)
       doc.setFontSize(12)
@@ -308,31 +299,146 @@ export async function generateExamPDF(
         doc.text(line, ix, yPos + i * 5.5)
       })
       yPos += qLines.length * 5.5 + 2
+      if (imageData) addInlineImage(imageData)
 
       if (question.options) {
         doc.setFontSize(11)
         const optLabels = ['a)', 'b)', 'c)', 'd)']
-        const colW = contentWidth / 2
+        const optIndent = ix + 4
+        const optWidth = contentWidth - (optIndent - margin) - 5
         question.options.forEach((opt: string, oi: number) => {
-          const col = oi % 2
-          const xPos = ix + col * colW
-          if (col === 0 && oi > 0) yPos += 5.5
-          const optText = `${optLabels[oi]} ${opt}`
-          const optLines = wrap(optText, colW - 5)
+          checkPageBreak(6)
+          const optText = `${optLabels[oi]}  ${opt}`
+          const optLines = wrap(optText, optWidth)
           optLines.forEach((line: string, li: number) => {
-            doc.text(line, xPos, yPos + li * 5)
+            doc.text(line, optIndent, yPos + li * 5.5)
           })
+          yPos += optLines.length * 5.5
         })
-        yPos += 6
+        yPos += 3
       }
       yPos += 2
     }
 
+    // Render Circle/Tick sub-item — no image case (fallback)
+    const addCircleItem = (question: any, subIdx: number, imageData?: string) => {
+      checkPageBreak(25)
+      const prefix = `${toRoman(subIdx + 1)})  `
+      const qText = question.question || question.statement || ''
+      const qLines = wrap(prefix + qText, contentWidth - (ix - margin) - 10)
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'normal')
+      qLines.forEach((line: string, i: number) => {
+        doc.text(line, ix, yPos + i * 5.5)
+      })
+      yPos += qLines.length * 5.5 + 3
+      if (imageData) addInlineImage(imageData, 55, 42)
+
+      if (question.options) {
+        const opts: string[] = question.options
+        const optIndent = ix + 4
+        doc.setFontSize(11)
+        if (opts.length <= 3) {
+          const colW = (contentWidth - (optIndent - margin)) / opts.length
+          opts.forEach((opt: string, oi: number) => {
+            const xPos = optIndent + oi * colW
+            const boxSize = 4
+            doc.setLineWidth(0.3)
+            doc.rect(xPos, yPos - boxSize + 1, boxSize, boxSize)
+            doc.text(` ${opt}`, xPos + boxSize + 1, yPos)
+          })
+          yPos += 8
+        } else {
+          const colW = (contentWidth - (optIndent - margin)) / 2
+          opts.forEach((opt: string, oi: number) => {
+            const col = oi % 2
+            const xPos = optIndent + col * colW
+            if (col === 0 && oi > 0) yPos += 7
+            const boxSize = 4
+            doc.setLineWidth(0.3)
+            doc.rect(xPos, yPos - boxSize + 1, boxSize, boxSize)
+            const optLines = wrap(` ${opt}`, colW - boxSize - 3)
+            optLines.forEach((line: string, li: number) => {
+              doc.text(line, xPos + boxSize + 1, yPos + li * 5.5)
+            })
+          })
+          yPos += 8
+        }
+      }
+      yPos += 2
+    }
+
+    // Render circle/tick group as horizontal picture grid (like sample Q2: a.m./p.m.)
+    // Used when ≥2 items each have an image — renders all items side-by-side in one row
+    const addCircleGroupHorizontal = (questions: any[], itemImages: (string | undefined)[]) => {
+      const count = questions.length
+      const usableW = contentWidth - (ix - margin)
+      const cellW   = usableW / count
+      const imgH    = 36
+      const imgW    = Math.min(cellW - 6, 44)
+
+      checkPageBreak(imgH + 35)
+
+      // Row 1 — images
+      for (let i = 0; i < count; i++) {
+        const cellX = ix + i * cellW
+        const imgX  = cellX + (cellW - imgW) / 2
+        doc.setLineWidth(0.3)
+        doc.rect(imgX, yPos, imgW, imgH)
+        const img = itemImages[i]
+        if (img) {
+          try { doc.addImage(img, 'JPEG', imgX, yPos, imgW, imgH) }
+          catch {
+            doc.setFontSize(7); doc.setTextColor(150,150,150)
+            doc.text('[img]', imgX + imgW/2, yPos + imgH/2, { align: 'center' })
+            doc.setTextColor(0,0,0)
+          }
+        }
+      }
+      yPos += imgH + 4
+
+      // Row 2 — roman numeral + question label below each image
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      let maxLabelH = 0
+      for (let i = 0; i < count; i++) {
+        const cellX = ix + i * cellW
+        const qText = questions[i].question || questions[i].statement || ''
+        const label = `${toRoman(i+1)}) ${qText}`
+        const lLines = wrap(label, cellW - 4)
+        lLines.forEach((line: string, li: number) => {
+          doc.text(line, cellX, yPos + li * 4.5)
+        })
+        maxLabelH = Math.max(maxLabelH, lLines.length * 4.5)
+      }
+      yPos += maxLabelH + 4
+
+      // Row 3 — options with □ checkboxes (one set per cell)
+      const sampleOpts: string[] = questions[0]?.options || []
+      if (sampleOpts.length > 0) {
+        doc.setFontSize(10)
+        const boxSize = 3.5
+        for (let i = 0; i < count; i++) {
+          const cellX = ix + i * cellW
+          const opts: string[] = questions[i].options || sampleOpts
+          const optSpacing = (cellW - 4) / opts.length
+          opts.forEach((opt: string, oi: number) => {
+            const oxPos = cellX + oi * optSpacing
+            doc.setLineWidth(0.25)
+            doc.rect(oxPos, yPos - boxSize + 1, boxSize, boxSize)
+            doc.text(` ${opt}`, oxPos + boxSize + 1, yPos)
+          })
+        }
+        yPos += 9
+      }
+    }
+
 
     // Render Fill in Blanks sub-item — blanks as drawn lines, not underscores
-    const addFillInBlanksItem = (question: any, subIdx: number) => {
+    const addFillInBlanksItem = (question: any, subIdx: number, imageData?: string) => {
       checkPageBreak(14)
-      const prefix = `(${toRoman(subIdx + 1)})  `
+      if (imageData) addInlineImage(imageData)
+      const prefix = `${toRoman(subIdx + 1)})  `
       const rawText = question.question || ''
       // Split text at blank markers (___) so we can draw real lines
       const segments = rawText.split(/_{3,}/)
@@ -376,48 +482,112 @@ export async function generateExamPDF(
       yPos = baseY + 12  // generous spacing between items
     }
 
-    // Render Match Columns group (single question with two-column table)
-    const addMatchColumnsItem = (question: any, subIdx: number) => {
+    // Render Match Columns — horizontal picture layout when colA has images (like sample Q3)
+    const addMatchColumnsItem = (question: any, subIdx: number, colAImages?: Record<number, string>) => {
       const colA: string[] = question.column_a || []
       const colB: string[] = question.column_b || []
       const rows = Math.max(colA.length, colB.length)
-      const rowH = 7
-      const neededH = rows * rowH + 20
-      checkPageBreak(neededH)
 
-      const prefix = `(${toRoman(subIdx + 1)})`
+      const prefix = `${toRoman(subIdx + 1)})`
       doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
       doc.text(prefix, ix, yPos)
       yPos += 6
 
-      // Table headers
+      // ── Horizontal picture layout (when any colA images uploaded) ──────────────
+      const allColAHaveImages = rows > 0 && Array.from({ length: rows }, (_, r) => r).every(r => !!colAImages?.[r])
+      if (allColAHaveImages && colAImages) {
+        const usableW = contentWidth - (ix - margin)
+        const cellW   = usableW / rows
+        const imgH    = 32
+        const imgW    = Math.min(cellW - 6, 38)
+        checkPageBreak(imgH + 40)
+
+        // Row 1 — images with number below
+        for (let r = 0; r < rows; r++) {
+          const cellX = ix + r * cellW
+          const imgX  = cellX + (cellW - imgW) / 2
+          doc.setLineWidth(0.3)
+          doc.rect(imgX, yPos, imgW, imgH)
+          try { doc.addImage(colAImages[r], 'JPEG', imgX, yPos, imgW, imgH) }
+          catch {
+            doc.setFontSize(7); doc.setTextColor(150,150,150)
+            doc.text('[img]', imgX + imgW/2, yPos + imgH/2, { align: 'center' })
+            doc.setTextColor(0,0,0)
+          }
+        }
+        yPos += imgH + 3
+
+        // Numbers below images
+        doc.setFontSize(10); doc.setFont('helvetica', 'bold')
+        for (let r = 0; r < rows; r++) {
+          const cellX = ix + r * cellW + cellW/2
+          doc.text(`${r + 1}`, cellX, yPos, { align: 'center' })
+        }
+        yPos += 8
+
+        // Separator
+        doc.setLineWidth(0.3)
+        doc.line(ix, yPos, pageWidth - margin, yPos)
+        yPos += 6
+
+        // Column B items in a row (like the labels at the bottom of sample Q3)
+        doc.setFontSize(11); doc.setFont('helvetica', 'normal')
+        const bCellW = usableW / rows
+        colB.forEach((bItem: string, r: number) => {
+          const bX = ix + r * bCellW
+          const bText = `${String.fromCharCode(97 + r)}) ${bItem}`
+          const bLines = wrap(bText, bCellW - 4)
+          bLines.forEach((line: string, li: number) => {
+            doc.text(line, bX, yPos + li * 5)
+          })
+        })
+        yPos += 8
+
+        // Answer row: 1-___ 2-___ 3-___ ...
+        doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+        doc.text('Ans:', ix, yPos)
+        let ansX = ix + doc.getTextWidth('Ans:  ')
+        for (let r = 0; r < rows; r++) {
+          doc.text(`${r + 1}.`, ansX, yPos)
+          ansX += doc.getTextWidth(`${r + 1}.`)
+          doc.setLineWidth(0.3)
+          doc.line(ansX + 1, yPos + 1, ansX + 14, yPos + 1)
+          ansX += 20
+        }
+        yPos += 8
+        return
+      }
+
+      // ── Standard two-column table layout (no images) ─────────────────────────
       const tableLeft = margin + 5
       const colAWidth = contentWidth / 2 - 5
       const colBWidth = contentWidth / 2 - 5
-      const colBLeft = tableLeft + colAWidth + 8
+      const colBLeft  = tableLeft + colAWidth + 8
 
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11)
       doc.text('Column A', tableLeft + colAWidth / 2, yPos, { align: 'center' })
-      doc.text('Column B', colBLeft + colBWidth / 2, yPos, { align: 'center' })
+      doc.text('Column B', colBLeft  + colBWidth / 2, yPos, { align: 'center' })
       yPos += 3
       doc.setLineWidth(0.4)
       doc.line(tableLeft, yPos, tableLeft + colAWidth, yPos)
-      doc.line(colBLeft, yPos, colBLeft + colBWidth, yPos)
+      doc.line(colBLeft,  yPos, colBLeft  + colBWidth, yPos)
       yPos += 5
 
-      // Table rows
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(11)
+      // Strip any leading numbering the LLM already included (e.g. "1. Clockwise" → "Clockwise")
+      const stripLeadingNum  = (s: string) => s.replace(/^\d+[\.\)]\s*/, '').replace(/^[A-Ea-e][\.\)]\s*/, '')
+
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(11)
       for (let r = 0; r < rows; r++) {
-        checkPageBreak(rowH + 2)
-        const aItem = colA[r] ? String(colA[r]) : ''
-        const bItem = colB[r] ? String(colB[r]) : ''
+        checkPageBreak(9)
+        const aRaw  = colA[r] ? stripLeadingNum(String(colA[r])) : ''
+        const bRaw  = colB[r] ? stripLeadingNum(String(colB[r])) : ''
+        const aItem = aRaw ? `${r + 1}.  ${aRaw}` : ''
+        const bItem = bRaw ? `${String.fromCharCode(65 + r)}.  ${bRaw}` : ''
         const aLines = wrap(aItem, colAWidth - 3)
         const bLines = wrap(bItem, colBWidth - 3)
         aLines.forEach((line: string, li: number) => doc.text(line, tableLeft, yPos + li * 5))
-        bLines.forEach((line: string, li: number) => doc.text(line, colBLeft, yPos + li * 5))
+        bLines.forEach((line: string, li: number) => doc.text(line, colBLeft,  yPos + li * 5))
         yPos += Math.max(aLines.length, bLines.length) * 5 + 2
       }
       yPos += 3
@@ -435,7 +605,7 @@ export async function generateExamPDF(
         const subQs = question.sub_questions || []
         subQs.forEach((subQ: any, subIdx: number) => {
           checkPageBreak(12)
-          const prefix = `(${toRoman(subIdx + 1)})  `
+          const prefix = `${toRoman(subIdx + 1)})  `
           const qText = subQ.question || subQ.statement || ''
           const qLines = wrap(prefix + qText, contentWidth - (ix - margin) - 10)
           doc.setFontSize(12)
@@ -478,7 +648,7 @@ export async function generateExamPDF(
       checkPageBreak(12)
       const isObj = typeof wordItem === 'object' && wordItem !== null
       const word = isObj ? (wordItem.word || '') : String(wordItem || '')
-      const prefix = `(${toRoman(subIdx + 1)})  `
+      const prefix = `${toRoman(subIdx + 1)})  `
       // Set font before getTextWidth so measurement is accurate
       doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
@@ -490,10 +660,10 @@ export async function generateExamPDF(
       yPos += 8
     }
 
-    // Render short/long answer sub-item
-    const addAnswerLinesItem = (question: any, subIdx: number, lineCount = 4) => {
+    // Render short/long answer sub-item — with "Ans:" prefixed answer lines
+    const addAnswerLinesItem = (question: any, subIdx: number, lineCount = 4, imageData?: string) => {
       checkPageBreak(lineCount * 12 + 15)
-      const prefix = `(${toRoman(subIdx + 1)})  `
+      const prefix = `${toRoman(subIdx + 1)})  `
       const qText = question.question || question.statement || ''
       const qLines = wrap(prefix + qText, contentWidth - (ix - margin) - 10)
       doc.setFontSize(12)
@@ -501,11 +671,21 @@ export async function generateExamPDF(
       qLines.forEach((line: string, i: number) => {
         doc.text(line, ix, yPos + i * 5.5)
       })
-      yPos += qLines.length * 5.5 + 3
+      yPos += qLines.length * 5.5 + 4
+      if (imageData) addInlineImage(imageData)
+      // First line has "Ans:" label, rest are plain lines
       for (let l = 0; l < lineCount; l++) {
         checkPageBreak(13)
         doc.setLineWidth(0.2)
-        doc.line(margin, yPos, pageWidth - margin, yPos)
+        if (l === 0) {
+          doc.setFontSize(11)
+          doc.setFont('helvetica', 'bold')
+          doc.text('Ans:', ix, yPos)
+          doc.setFont('helvetica', 'normal')
+          doc.line(ix + doc.getTextWidth('Ans:') + 3, yPos + 1, pageWidth - margin, yPos + 1)
+        } else {
+          doc.line(ix, yPos + 1, pageWidth - margin, yPos + 1)
+        }
         yPos += 12
       }
       yPos += 2
@@ -514,7 +694,7 @@ export async function generateExamPDF(
     // Render creative writing sub-item (with vocabulary words + lines_required)
     const addCreativeWritingItem = (question: any, subIdx: number) => {
       checkPageBreak(50)
-      const prefix = `(${toRoman(subIdx + 1)})  `
+      const prefix = `${toRoman(subIdx + 1)})  `
       // Use prompt (topic) only — skip meta-instructions like "write one sentence"
       const promptText = question.prompt || question.topic || ''
       // Set font BEFORE wrap() so splitTextToSize uses correct character widths
@@ -526,16 +706,19 @@ export async function generateExamPDF(
       })
       yPos += pLines.length * 5.5 + 3
 
-      // Show vocabulary words if provided
+      // Show vocabulary words in a bordered box
       const vocabWords: string[] = question.vocabulary_words || []
       if (vocabWords.length > 0) {
-        checkPageBreak(8)
+        checkPageBreak(14)
+        const wbBoxH = 9
+        doc.setLineWidth(0.4)
+        doc.rect(ix, yPos, contentWidth - (ix - margin), wbBoxH)
         doc.setFontSize(10)
         doc.setFont('helvetica', 'bold')
-        doc.text('Word Bank: ', ix, yPos)
+        doc.text('Word Bank: ', ix + 3, yPos + 6)
         doc.setFont('helvetica', 'normal')
-        doc.text(vocabWords.join('  |  '), ix + 23, yPos)
-        yPos += 7
+        doc.text(vocabWords.join('   |   '), ix + 3 + doc.getTextWidth('Word Bank: '), yPos + 6)
+        yPos += wbBoxH + 4
       }
 
       // Use lines_required if available, else default to 6
@@ -552,7 +735,7 @@ export async function generateExamPDF(
     // Render picture description sub-item
     const addPictureDescriptionItem = (question: any, subIdx: number, imageData?: string) => {
       checkPageBreak(60)
-      const prefix = `(${toRoman(subIdx + 1)})  `
+      const prefix = `${toRoman(subIdx + 1)})  `
       const desc = question.instruction || 'Look at the picture and describe it.'
       const dLines = wrap(prefix + desc, contentWidth - (ix - margin) - 10)
       doc.setFontSize(12)
@@ -600,7 +783,7 @@ export async function generateExamPDF(
     // Render label figures sub-item (instruction text + image box per sub-item)
     const addLabelFiguresItem = (_question: any, subIdx: number, imageData?: string) => {
       checkPageBreak(60)
-      const prefix = `(${toRoman(subIdx + 1)})`
+      const prefix = `${toRoman(subIdx + 1)})`
       // Only show the sub-item number — no repeated instruction text
       doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
@@ -640,7 +823,7 @@ export async function generateExamPDF(
     // Render a drawing exercise sub-item (question text + empty drawing box)
     const addDrawingExerciseItem = (question: any, subIdx: number, boxW = 110, boxH = 40) => {
       checkPageBreak(boxH + 25)
-      const prefix = `(${toRoman(subIdx + 1)})  `
+      const prefix = `${toRoman(subIdx + 1)})  `
       const qText = question.question || question.instruction || ''
       doc.setFontSize(12)
       doc.setFont('helvetica', 'normal')
@@ -665,7 +848,7 @@ export async function generateExamPDF(
     // Render real-life story problem: shows context sentence, then question, then answer lines
     const addStoryProblemItem = (question: any, subIdx: number) => {
       checkPageBreak(50)
-      const prefix = `(${toRoman(subIdx + 1)})  `
+      const prefix = `${toRoman(subIdx + 1)})  `
       doc.setFontSize(12)
 
       const context = question.context || ''
@@ -729,7 +912,7 @@ export async function generateExamPDF(
 
     const addWorkSpaceItem = (question: any, subIdx: number, workLines = 5) => {
       checkPageBreak(workLines * 8 + 20)
-      const prefix = `(${toRoman(subIdx + 1)})  `
+      const prefix = `${toRoman(subIdx + 1)})  `
       const qText = question.question || question.statement || ''
       doc.setFontSize(12)
       doc.setFont('helvetica', 'normal')
@@ -765,7 +948,7 @@ export async function generateExamPDF(
     // Render complete sentences sub-item
     const addCompleteSentencesItem = (sent: any, subIdx: number) => {
       checkPageBreak(10)
-      const prefix = `(${toRoman(subIdx + 1)})  `
+      const prefix = `${toRoman(subIdx + 1)})  `
       const isObj = typeof sent === 'object' && sent !== null
       const text = isObj ? (sent.incomplete || sent.sentence || '') : String(sent || '')
       const qLines = wrap(prefix + text, contentWidth - (ix - margin) - 10)
@@ -780,7 +963,7 @@ export async function generateExamPDF(
     // Render rearrange sentences sub-item
     const addRearrangeSentencesItem = (question: any, subIdx: number) => {
       checkPageBreak(15)
-      const prefix = `(${toRoman(subIdx + 1)})  `
+      const prefix = `${toRoman(subIdx + 1)})  `
       // No verbose instruction — Q header label is sufficient
       const sentences: string[] = question.sentences || []
       doc.setFontSize(12)
@@ -816,7 +999,7 @@ export async function generateExamPDF(
       // Each incorrect sentence + blank correction line
       sentences.forEach((sent: any, si: number) => {
         checkPageBreak(16)
-        const incorrectText = `(${toRoman(si + 1)})  ${sent.incorrect || ''}`
+        const incorrectText = `${toRoman(si + 1)})  ${sent.incorrect || ''}`
         const sLines = wrap(incorrectText, contentWidth - (ix - margin) - 10)
         doc.setFontSize(12)
         doc.setFont('helvetica', 'normal')
@@ -841,7 +1024,7 @@ export async function generateExamPDF(
       // No instruction text — Q header label is sufficient
       sentences.forEach((sent: any, si: number) => {
         checkPageBreak(16)
-        const sentText = `(${toRoman(si + 1)})  ${sent.sentence || ''}`
+        const sentText = `${toRoman(si + 1)})  ${sent.sentence || ''}`
         const sLines = wrap(sentText, contentWidth - (ix - margin) - 10)
         doc.setFontSize(12)
         doc.setFont('helvetica', 'normal')
@@ -891,53 +1074,94 @@ export async function generateExamPDF(
 
         // Special handling: comprehension handled differently
         if (typeId === 'unseen_comprehension_objective') {
-          addGroupHeader(typeId, typeMarks)
+          addGroupHeader(typeId, typeMarks, buildMarksDisplay(filteredQs, typeMarks))
           addComprehensionGroup(filteredQs, typeId)
           continue
         }
 
         // Special handling: match_columns rendered per question as full table
         if (typeId === 'match_columns') {
-          addGroupHeader(typeId, typeMarks)
-          filteredQs.forEach((q, subIdx) => addMatchColumnsItem(q, subIdx))
+          addGroupHeader(typeId, typeMarks, buildMarksDisplay(filteredQs, typeMarks))
+          filteredQs.forEach((q, subIdx) => {
+            const origIdx = filteredIndices[subIdx]
+            const colAImgs: Record<number, string> = {}
+            const colALen = (q.column_a || []).length
+            for (let r = 0; r < colALen; r++) {
+              const key = `obj-match_columns-${origIdx}-colA-${r}`
+              if (questionImages[key]) colAImgs[r] = questionImages[key]
+            }
+            addMatchColumnsItem(q, subIdx, Object.keys(colAImgs).length > 0 ? colAImgs : undefined)
+          })
           continue
         }
 
         // Special handling: rearrange_sentences
         if (typeId === 'rearrange_sentences') {
-          addGroupHeader(typeId, typeMarks)
+          addGroupHeader(typeId, typeMarks, buildMarksDisplay(filteredQs, typeMarks))
           filteredQs.forEach((q, subIdx) => addRearrangeSentencesItem(q, subIdx))
           continue
         }
 
-        addGroupHeader(typeId, typeMarks)
+        addGroupHeader(typeId, typeMarks, buildMarksDisplay(filteredQs, typeMarks))
+
+        // circle_correct_answer: use horizontal grid if all items have images (like sample Q2 a.m./p.m.)
+        if (typeId === 'circle_correct_answer') {
+          const circleImgs = filteredIndices.map(oi => questionImages[`obj-circle_correct_answer-${oi}`])
+          const allHaveImages = filteredQs.length >= 2 && circleImgs.every(Boolean)
+          if (allHaveImages) {
+            addCircleGroupHorizontal(filteredQs, circleImgs)
+          } else {
+            filteredQs.forEach((q, subIdx) => addCircleItem(q, subIdx, circleImgs[subIdx]))
+          }
+          yPos += 4
+          continue
+        }
 
         // True/False: show T / F column headers once before items
         if (typeId === 'true_false') addTrueFalseColumnHeaders()
 
         filteredQs.forEach((question, subIdx) => {
           switch (typeId) {
-            case 'true_false':
-              addTrueFalseItem(question.statement || question.question || '', subIdx)
+            case 'true_false': {
+              const tfImgId = `obj-true_false-${filteredIndices[subIdx]}`
+              addTrueFalseItem(question.statement || question.question || '', subIdx, questionImages[tfImgId])
               break
-            case 'fill_in_blanks':
-              addFillInBlanksItem(question, subIdx)
+            }
+            case 'fill_in_blanks': {
+              const fibImgId = `obj-fill_in_blanks-${filteredIndices[subIdx]}`
+              addFillInBlanksItem(question, subIdx, questionImages[fibImgId])
               break
-            case 'mcq':
-            case 'circle_correct_answer':
-              addMCQItem(question, subIdx)
+            }
+            case 'mcq': {
+              const mcqImgId = `obj-mcq-${filteredIndices[subIdx]}`
+              addMCQItem(question, subIdx, questionImages[mcqImgId])
               break
+            }
+            case 'circle_correct_answer': {
+              const circleImgId = `obj-circle_correct_answer-${filteredIndices[subIdx]}`
+              addCircleItem(question, subIdx, questionImages[circleImgId])
+              break
+            }
             case 'fill_in_blanks_from_word_bank': {
-              // Show the word bank on a separate line before the blank sentence
+              // Word bank in a bordered box — show once before first item
               const wordBank: string[] = question.word_bank || []
               if (wordBank.length > 0 && subIdx === 0) {
-                checkPageBreak(8)
+                checkPageBreak(14)
+                const wbLabel = 'Word Bank:  '
+                const wbText = wordBank.join('     ')
+                const wbContent = wbLabel + wbText
+                const wbLines = wrap(wbContent, contentWidth - 10)
+                const wbBoxH = wbLines.length * 5.5 + 6
+                doc.setLineWidth(0.4)
+                doc.rect(ix, yPos, contentWidth - (ix - margin), wbBoxH)
                 doc.setFontSize(11)
                 doc.setFont('helvetica', 'bold')
-                doc.text('Word Bank:', ix, yPos)
+                doc.text('Word Bank:', ix + 3, yPos + 5)
                 doc.setFont('helvetica', 'normal')
-                doc.text('  ' + wordBank.join('   |   '), ix + doc.getTextWidth('Word Bank:'), yPos)
-                yPos += 8
+                const wordsText = wordBank.join('     ')
+                const wordsX = ix + 3 + doc.getTextWidth('Word Bank:  ')
+                doc.text(wordsText, wordsX, yPos + 5)
+                yPos += wbBoxH + 4
               }
               addFillInBlanksItem({ question: question.blanks_sentence, answer: question.answer }, subIdx)
               break
@@ -958,7 +1182,7 @@ export async function generateExamPDF(
           }
         })
 
-        yPos += 4
+        yPos += 7
       }
     }
 
@@ -981,12 +1205,12 @@ export async function generateExamPDF(
 
         // Comprehension subjective
         if (typeId === 'unseen_comprehension_subjective') {
-          addGroupHeader(typeId, typeMarks)
+          addGroupHeader(typeId, typeMarks, buildMarksDisplay(filteredQs, typeMarks))
           addComprehensionGroup(filteredQs, typeId)
           continue
         }
 
-        addGroupHeader(typeId, typeMarks)
+        addGroupHeader(typeId, typeMarks, buildMarksDisplay(filteredQs, typeMarks))
 
         filteredQs.forEach((question, subIdx) => {
           switch (typeId) {
@@ -1014,12 +1238,16 @@ export async function generateExamPDF(
               addLabelFiguresItem(question, subIdx, questionImages[imgId])
               break
             }
-            case 'short_answer':
-              addAnswerLinesItem(question, subIdx, 4)
+            case 'short_answer': {
+              const saImgId = `subj-short_answer-${filteredIndices[subIdx]}`
+              addAnswerLinesItem(question, subIdx, 4, questionImages[saImgId])
               break
-            case 'long_answer':
-              addAnswerLinesItem(question, subIdx, 7)
+            }
+            case 'long_answer': {
+              const laImgId = `subj-long_answer-${filteredIndices[subIdx]}`
+              addAnswerLinesItem(question, subIdx, 7, questionImages[laImgId])
               break
+            }
             case 'practice_questions_by_topic':
               addWorkSpaceItem(question, subIdx, question.requires_drawing ? 6 : 5)
               break
@@ -1037,7 +1265,7 @@ export async function generateExamPDF(
           }
         })
 
-        yPos += 4
+        yPos += 7
       }
     }
 
@@ -1102,12 +1330,12 @@ export async function generateExamPDF(
             if (q.sub_questions) {
               q.sub_questions.forEach((sq: any, si: number) => {
                 checkPageBreak(6)
-                const ansText = `  (${toRoman(si + 1)}) ${renderAKAnswer(sq.answer)}  (${formatMarks(sq.marks || 0)} marks)`
+                const ansText = `  ${toRoman(si + 1)})${renderAKAnswer(sq.answer)}  (${formatMarks(sq.marks || 0)} marks)`
                 doc.text(ansText, margin + 5, yPos)
                 yPos += 5.5
               })
             } else {
-              const ansText = `  (${toRoman(subIdx + 1)}) ${renderAKAnswer(q.answer)}  (${formatMarks(q.marks || 0)} marks)`
+              const ansText = `  ${toRoman(subIdx + 1)}) ${renderAKAnswer(q.answer)}  (${formatMarks(q.marks || 0)} marks)`
               doc.text(ansText, margin + 5, yPos)
               yPos += 5.5
             }
@@ -1134,7 +1362,7 @@ export async function generateExamPDF(
             if (q.sub_questions) {
               q.sub_questions.forEach((sq: any, si: number) => {
                 checkPageBreak(10)
-                const ansLines = wrap(`  (${toRoman(si + 1)}) ${sq.answer || 'N/A'}  (${formatMarks(sq.marks || 0)} marks)`, contentWidth - 10)
+                const ansLines = wrap(`  ${toRoman(si + 1)})${sq.answer || 'N/A'}  (${formatMarks(sq.marks || 0)} marks)`, contentWidth - 10)
                 ansLines.forEach((line: string, li: number) => doc.text(line, margin + 5, yPos + li * 5))
                 yPos += ansLines.length * 5 + 2
               })
@@ -1144,14 +1372,14 @@ export async function generateExamPDF(
                 const word = typeof w === 'object' ? w.word : w
                 const sampleAns = typeof w === 'object' && w.answer ? w.answer : '(student\'s own sentence)'
                 checkPageBreak(6)
-                doc.text(`  (${toRoman(wi + 1)}) ${word}: ${sampleAns}`, margin + 5, yPos)
+                doc.text(`  ${toRoman(wi + 1)}) ${word}: ${sampleAns}`, margin + 5, yPos)
                 yPos += 5.5
               })
             } else if (typeId === 'grammar_correction') {
               const sentences: any[] = q.sentences || []
               sentences.forEach((sent: any, si: number) => {
                 checkPageBreak(6)
-                const ansLines = wrap(`  (${toRoman(si + 1)}) ${sent.answer || 'N/A'}`, contentWidth - 10)
+                const ansLines = wrap(`  ${toRoman(si + 1)})${sent.answer || 'N/A'}`, contentWidth - 10)
                 ansLines.forEach((line: string, li: number) => doc.text(line, margin + 5, yPos + li * 5))
                 yPos += ansLines.length * 5 + 1.5
               })
@@ -1159,13 +1387,13 @@ export async function generateExamPDF(
               const sentences: any[] = q.sentences || []
               sentences.forEach((sent: any, si: number) => {
                 checkPageBreak(6)
-                const ansLines = wrap(`  (${toRoman(si + 1)}) ${sent.answer || 'N/A'}`, contentWidth - 10)
+                const ansLines = wrap(`  ${toRoman(si + 1)})${sent.answer || 'N/A'}`, contentWidth - 10)
                 ansLines.forEach((line: string, li: number) => doc.text(line, margin + 5, yPos + li * 5))
                 yPos += ansLines.length * 5 + 1.5
               })
             } else {
               const ans = q.sample_answer || q.answer || 'N/A'
-              const prefix = `  (${toRoman(subIdx + 1)}) `
+              const prefix = `  ${toRoman(subIdx + 1)}) `
               const ansLines = wrap(`${prefix}${ans}  (${q.marks || 0} marks)`, contentWidth - 10)
               ansLines.forEach((line: string, li: number) => doc.text(line, margin + 5, yPos + li * 5))
               yPos += ansLines.length * 5 + 2
@@ -1174,6 +1402,17 @@ export async function generateExamPDF(
           yPos += 3
         }
       }
+    }
+
+    // Add "Page X of Y" to every page
+    const totalPages = doc.getNumberOfPages()
+    for (let p = 1; p <= totalPages; p++) {
+      doc.setPage(p)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(100, 100, 100)
+      doc.text(`Page ${p} of ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: 'center' })
+      doc.setTextColor(0, 0, 0)
     }
 
     doc.save(filename)

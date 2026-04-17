@@ -216,45 +216,55 @@ class LLMService:
             return {"success": False, "error": f"LLM generation failed: {str(e)}"}
 
     def _extract_json(self, text: str) -> Dict:
-        """Extract JSON from LLM response, handling markdown wrapping"""
+        """Extract JSON from LLM response, handling markdown wrapping and syntax errors"""
         if not text or not text.strip():
             raise json.JSONDecodeError("Empty response text", text or "", 0)
 
         text = text.strip()
 
-        # Try direct parse
+        # Step 1: try direct parse
         try:
             return json.loads(text)
         except json.JSONDecodeError:
             logger.debug("Direct JSON parse failed, trying extraction methods...")
 
-        # Try markdown code blocks
+        # Step 2: extract from markdown code blocks
+        json_str = None
         for marker in ["```json", "```"]:
             if marker in text:
                 start = text.find(marker) + len(marker)
                 end = text.find("```", start)
                 if end > start:
-                    json_str = text[start:end].strip()
+                    candidate = text[start:end].strip()
                     try:
-                        return json.loads(json_str)
+                        return json.loads(candidate)
                     except json.JSONDecodeError:
-                        logger.debug(f"Failed to parse JSON from {marker} block")
+                        json_str = candidate  # save for repair attempt below
+                        logger.debug(f"Failed to parse JSON from {marker} block — will attempt repair")
 
-        # Try finding JSON object (from first { to last })
-        start = text.find("{")
-        end = text.rfind("}") + 1
-        if start != -1 and end > start:
-            json_str = text[start:end]
+        # Step 3: extract { ... } block if no code block found
+        if json_str is None:
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            if start != -1 and end > start:
+                json_str = text[start:end]
+                try:
+                    return json.loads(json_str)
+                except json.JSONDecodeError as e:
+                    logger.debug(f"Raw brace extraction failed: {e} — will attempt repair")
+
+        # Step 4: attempt JSON repair using json-repair library
+        if json_str:
             try:
-                result = json.loads(json_str)
-                logger.info(f"✅ Extracted JSON from position {start} to {end}")
-                return result
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse extracted JSON: {e}")
-                logger.error(f"Extracted text preview: {json_str[:200]}...")
+                from json_repair import repair_json
+                repaired = repair_json(json_str, return_objects=True)
+                if isinstance(repaired, dict) and repaired:
+                    logger.info("✅ JSON repaired successfully using json-repair")
+                    return repaired
+            except Exception as repair_err:
+                logger.debug(f"json-repair failed: {repair_err}")
 
-        # Last resort: try to find and parse line by line
-        logger.error(f"All JSON extraction methods failed")
+        logger.error("All JSON extraction methods failed")
         logger.error(f"Response text length: {len(text)}")
         logger.error(f"First 200 chars: {text[:200]}")
         logger.error(f"Last 200 chars: {text[-200:]}")

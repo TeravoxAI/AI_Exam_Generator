@@ -103,6 +103,35 @@ export default function ExamDetail() {
     reader.readAsDataURL(file)
   }
 
+  // Reusable image upload slot — used for any question type that supports a picture
+  const renderImageSlot = (key: string, label = 'Add Image') => {
+    if (questionImages[key]) {
+      return (
+        <div className="relative inline-block mt-2">
+          <img src={questionImages[key]} alt="question" className="max-w-[180px] max-h-[120px] rounded border border-gray-300 object-contain" />
+          <button
+            onClick={() => { const n = { ...questionImages }; delete n[key]; setQuestionImages(n) }}
+            className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+          >×</button>
+        </div>
+      )
+    }
+    return (
+      <div className="mt-2">
+        <input type="file" accept="image/*" className="hidden"
+          ref={el => { fileInputRefs.current[key] = el }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) handleImageUpload(key, f) }}
+        />
+        <button
+          onClick={() => fileInputRefs.current[key]?.click()}
+          className="flex items-center gap-1.5 px-2 py-1 text-xs text-gray-500 bg-gray-50 border border-dashed border-gray-300 rounded hover:bg-blue-50 hover:border-blue-300 hover:text-blue-600 transition-colors"
+        >
+          <Upload size={11} /> {label}
+        </button>
+      </div>
+    )
+  }
+
   const downloadExam = async () => {
     if (!exam || selectedQuestions.size === 0) return
     setDownloading(true)
@@ -232,9 +261,12 @@ export default function ExamDetail() {
                                   )}
                                   <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                      <p className="text-xs font-semibold text-gray-500 mb-1">Column A</p>
+                                      <p className="text-xs font-semibold text-gray-500 mb-1">Column A <span className="text-blue-400 font-normal">(add pictures per row)</span></p>
                                       {(question.column_a || []).map((item: string, i: number) => (
-                                        <p key={i} className="text-sm">{i + 1}. {item}</p>
+                                        <div key={i} className="mb-2">
+                                          <p className="text-sm">{i + 1}. {item}</p>
+                                          {renderImageSlot(`obj-match_columns-${idx}-colA-${i}`, '+ Picture')}
+                                        </div>
                                       ))}
                                     </div>
                                     <div>
@@ -256,12 +288,45 @@ export default function ExamDetail() {
                                   <div className="mt-1 text-xs text-green-700 bg-green-50 px-2 py-1 rounded inline-block border-l-2 border-green-400 ml-2">
                                     <strong>Answer:</strong> {question.answer ? 'True' : 'False'}
                                   </div>
+                                  {renderImageSlot(`obj-true_false-${idx}`)}
+                                </div>
+                              ) : typeId === 'circle_correct_answer' ? (
+                                <div>
+                                  <span className="text-sm text-[var(--text-primary)]">
+                                    {question.question || question.statement}
+                                  </span>
+                                  {/* Picture slot — upload an image for this scenario.
+                                      If ALL items in this group have images, the PDF renders
+                                      them as a horizontal picture grid (like sample Q2 a.m./p.m.) */}
+                                  <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <p className="text-xs text-blue-600 font-medium mb-1">Picture for this item</p>
+                                    {renderImageSlot(`obj-circle_correct_answer-${idx}`, 'Upload picture')}
+                                    {questionImages[`obj-circle_correct_answer-${idx}`] && (
+                                      <p className="text-xs text-blue-400 mt-1">Upload pictures for ALL items → horizontal grid in PDF</p>
+                                    )}
+                                  </div>
+                                  {question.options && (
+                                    <div className="mt-1 flex flex-wrap gap-2">
+                                      {question.options.map((opt: string, oi: number) => (
+                                        <span key={oi} className="text-xs px-2 py-0.5 bg-gray-100 rounded text-gray-600">
+                                          {String.fromCharCode(97 + oi)}) {opt}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {question.answer !== undefined && (
+                                    <div className="mt-1 text-xs text-green-700 bg-green-50 px-2 py-1 rounded border-l-2 border-green-400">
+                                      <strong>Answer:</strong> {formatAnswer(question.answer)}
+                                      <span className="text-gray-400 ml-2">({question.marks} marks)</span>
+                                    </div>
+                                  )}
                                 </div>
                               ) : (
                                 <div>
                                   <span className="text-sm text-[var(--text-primary)]">
                                     {question.question || question.statement || question.instruction}
                                   </span>
+                                  {renderImageSlot(`obj-${typeId}-${idx}`)}
                                   {question.options && (
                                     <div className="mt-1 ml-2 grid grid-cols-2 gap-1">
                                       {question.options.map((opt: string, oi: number) => (
@@ -462,6 +527,7 @@ export default function ExamDetail() {
                                   <span className="text-sm text-[var(--text-primary)]">
                                     {question.question || question.statement || question.instruction || question.prompt}
                                   </span>
+                                  {renderImageSlot(`subj-${typeId}-${idx}`)}
                                   {(question.sample_answer || question.answer) && (
                                     <div className="mt-2 text-xs text-blue-700 bg-blue-50 px-2 py-1 rounded border-l-2 border-blue-400">
                                       <strong>Sample Answer:</strong> {question.sample_answer || question.answer}
@@ -570,13 +636,11 @@ export default function ExamDetail() {
                 </div>
               </div>
 
-              {/* Picture Description Note */}
-              {((exam.exam_content?.subjective?.picture_description as any[] | undefined) ?? []).length > 0 && (
-                <div className="mx-6 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2 text-sm text-amber-800">
-                  <Image size={16} />
-                  <span>Upload images for Picture Description questions using the upload button next to each question.</span>
-                </div>
-              )}
+              {/* Image upload info banner */}
+              <div className="mx-6 mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2 text-sm text-amber-800">
+                <Image size={16} className="mt-0.5 shrink-0" />
+                <span>You can add pictures to any question using the <strong>"Add Image"</strong> button. For <strong>Match the Columns</strong>, you can add a picture per row in Column A.</span>
+              </div>
 
               {/* Questions */}
               <div className="p-6">
