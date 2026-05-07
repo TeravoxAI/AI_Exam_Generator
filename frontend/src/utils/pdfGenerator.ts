@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf'
+import type { ImageStore } from './imageStore'
 
 interface ExamPDFOptions {
   filename?: string
@@ -57,8 +58,14 @@ export async function generateExamPDF(
   exam: any,
   selectedQuestions: Set<string>,
   options: ExamPDFOptions = {},
-  questionImages: Record<string, string> = {}
+  questionImagesOrStore: Record<string, string> | ImageStore = {}
 ): Promise<void> {
+  // Accept either legacy Record<string,string> or new ImageStore
+  const isImageStore = (v: any): v is ImageStore =>
+    Object.values(v).length === 0 || (typeof Object.values(v)[0] === 'object' && 'dataUrl' in (Object.values(v)[0] as any))
+  const imageStore: ImageStore = isImageStore(questionImagesOrStore)
+    ? (questionImagesOrStore as ImageStore)
+    : Object.fromEntries(Object.entries(questionImagesOrStore as Record<string, string>).map(([k, v]) => [k, { dataUrl: v, widthMm: 55, heightMm: 42, alignment: 'center' as const }]))
   const { filename = `exam_${new Date().toISOString().split('T')[0]}.pdf`, schoolName, totalMarksOverride, timeAllowed } = options
 
   try {
@@ -200,38 +207,49 @@ export async function generateExamPDF(
       return `[   /${formatMarks(total)}]`
     }
 
-    // Draw a question group header: Q1.  Fill in the Blanks    [0.5×4= /2]
+    // Draw a question group header: Q.1.  Fill in the Blanks    [0.5×4= /2]
     const addGroupHeader = (typeId: string, totalTypeMarks: number, marksDisplay?: string) => {
       questionNum++
       checkPageBreak(12)
       const label = TYPE_LABELS[typeId] || typeId.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
-      doc.setFontSize(13)
+      doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
       const qPrefix = `Q.${questionNum}.  `
       ix = margin + doc.getTextWidth(qPrefix)  // sub-items align under first letter of label
       doc.text(`${qPrefix}${label}`, margin, yPos)
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(13)
+      doc.setFontSize(12)
       const marksText = marksDisplay ?? `[   /${formatMarks(totalTypeMarks)}]`
       doc.text(marksText, pageWidth - margin, yPos, { align: 'right' })
-      yPos += 9
+      yPos += 7  // tight gap — items start close below header like sample
     }
 
-    // Render an inline image (centered between ix and right margin)
-    const addInlineImage = (imageData: string, imgW = 55, imgH = 42) => {
-      checkPageBreak(imgH + 6)
-      const imgX = ix + (contentWidth - (ix - margin) - imgW) / 2
+    // Render an inline image — uses per-image dimensions from imageStore when available
+    const addInlineImage = (imageData: string, imgW = 55, imgH = 42, imageKey?: string) => {
+      // Override dimensions with per-image settings if provided
+      const attachment = imageKey ? imageStore[imageKey] : undefined
+      const w = attachment?.widthMm ?? imgW
+      const h = attachment?.heightMm ?? imgH
+      const align = attachment?.alignment ?? 'center'
+      checkPageBreak(h + 6)
+      let imgX: number
+      if (align === 'left') imgX = ix
+      else if (align === 'right') imgX = pageWidth - margin - w
+      else imgX = ix + (contentWidth - (ix - margin) - w) / 2
       doc.setLineWidth(0.3)
-      doc.rect(imgX, yPos, imgW, imgH)
+      doc.rect(imgX, yPos, w, h)
       try {
-        doc.addImage(imageData, 'JPEG', imgX, yPos, imgW, imgH)
+        doc.addImage(imageData, 'JPEG', imgX, yPos, w, h)
       } catch {
-        doc.setFontSize(8)
-        doc.setTextColor(150, 150, 150)
-        doc.text('[Image]', imgX + imgW / 2, yPos + imgH / 2, { align: 'center' })
-        doc.setTextColor(0, 0, 0)
+        try {
+          doc.addImage(imageData, 'PNG', imgX, yPos, w, h)
+        } catch {
+          doc.setFontSize(8)
+          doc.setTextColor(150, 150, 150)
+          doc.text('[Image]', imgX + w / 2, yPos + h / 2, { align: 'center' })
+          doc.setTextColor(0, 0, 0)
+        }
       }
-      yPos += imgH + 4
+      yPos += h + 4
     }
 
     // Render a passage block
@@ -256,39 +274,48 @@ export async function generateExamPDF(
       yPos += passageBoxH + 4
     }
 
+    // Fixed right-side positions for T/F boxes — shared by header + items
+    const TF_BOX_SIZE = 5
+    const TF_GAP      = 5
+    const TF_F_X      = pageWidth - margin - TF_BOX_SIZE
+    const TF_T_X      = TF_F_X - TF_GAP - TF_BOX_SIZE
+    const TF_T_CX     = TF_T_X + TF_BOX_SIZE / 2
+    const TF_F_CX     = TF_F_X + TF_BOX_SIZE / 2
+
     // True/False column headers — call ONCE before the first item
     const addTrueFalseColumnHeaders = () => {
       checkPageBreak(8)
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
-      // T box: x = pageWidth-margin-20, width=6 → center at pageWidth-margin-17
-      // F box: x = pageWidth-margin-9,  width=6 → center at pageWidth-margin-6
-      doc.text('T', pageWidth - margin - 17, yPos, { align: 'center' })
-      doc.text('F', pageWidth - margin - 6,  yPos, { align: 'center' })
-      yPos += 6
+      doc.text('T', TF_T_CX, yPos, { align: 'center' })
+      doc.text('F', TF_F_CX, yPos, { align: 'center' })
+      yPos += 5
     }
 
-    // Render True/False sub-item (statement on left, two empty boxes on right — no T/F labels)
-    const addTrueFalseItem = (statement: string, subIdx: number, imageData?: string) => {
+    // Render True/False sub-item — boxes aligned exactly under T/F headers
+    const addTrueFalseItem = (statement: string, subIdx: number, imageData?: string, imageKey?: string) => {
       checkPageBreak(10)
       const prefix = `${toRoman(subIdx + 1)})  `
-      if (imageData) addInlineImage(imageData, 50, 38)
-      doc.setFontSize(12)
+      if (imageData) addInlineImage(imageData, 50, 38, imageKey)
+      doc.setFontSize(11)
       doc.setFont('helvetica', 'normal')
-      const stmtLines = wrap(prefix + statement, contentWidth - 28 - (ix - margin))
+      // Text width: from ix to left edge of T box, minus small gap
+      const tfTextW = TF_T_X - ix - 4
+      const stmtLines = wrap(prefix + statement, tfTextW)
+      const rowH = stmtLines.length * 5.5
       stmtLines.forEach((line: string, i: number) => {
         doc.text(line, ix, yPos + i * 5.5)
       })
-      // Two boxes on right — no T/F labels (they appear once as column headers)
-      const boxY = yPos - 3.5
+      // Boxes vertically centred on the row
+      const boxY = yPos + (rowH - TF_BOX_SIZE) / 2 - 1.5
       doc.setLineWidth(0.3)
-      doc.rect(pageWidth - margin - 20, boxY, 6, 5)   // T box
-      doc.rect(pageWidth - margin - 9,  boxY, 6, 5)   // F box
-      yPos += stmtLines.length * 5.5 + 2
+      doc.rect(TF_T_X, boxY, TF_BOX_SIZE, TF_BOX_SIZE)
+      doc.rect(TF_F_X, boxY, TF_BOX_SIZE, TF_BOX_SIZE)
+      yPos += rowH + 2.5
     }
 
     // Render MCQ sub-item — vertical option list (one per line), good for math equations
-    const addMCQItem = (question: any, subIdx: number, imageData?: string) => {
+    const addMCQItem = (question: any, subIdx: number, imageData?: string, imageKey?: string) => {
       checkPageBreak(25)
       const prefix = `${toRoman(subIdx + 1)})  `
       const qText = question.question || question.statement || ''
@@ -299,7 +326,7 @@ export async function generateExamPDF(
         doc.text(line, ix, yPos + i * 5.5)
       })
       yPos += qLines.length * 5.5 + 2
-      if (imageData) addInlineImage(imageData)
+      if (imageData) addInlineImage(imageData, 55, 42, imageKey)
 
       if (question.options) {
         doc.setFontSize(11)
@@ -321,7 +348,7 @@ export async function generateExamPDF(
     }
 
     // Render Circle/Tick sub-item — no image case (fallback)
-    const addCircleItem = (question: any, subIdx: number, imageData?: string) => {
+    const addCircleItem = (question: any, subIdx: number, imageData?: string, imageKey?: string) => {
       checkPageBreak(25)
       const prefix = `${toRoman(subIdx + 1)})  `
       const qText = question.question || question.statement || ''
@@ -332,7 +359,7 @@ export async function generateExamPDF(
         doc.text(line, ix, yPos + i * 5.5)
       })
       yPos += qLines.length * 5.5 + 3
-      if (imageData) addInlineImage(imageData, 55, 42)
+      if (imageData) addInlineImage(imageData, 55, 42, imageKey)
 
       if (question.options) {
         const opts: string[] = question.options
@@ -435,9 +462,9 @@ export async function generateExamPDF(
 
 
     // Render Fill in Blanks sub-item — blanks as drawn lines, not underscores
-    const addFillInBlanksItem = (question: any, subIdx: number, imageData?: string) => {
+    const addFillInBlanksItem = (question: any, subIdx: number, imageData?: string, imageKey?: string) => {
       checkPageBreak(14)
-      if (imageData) addInlineImage(imageData)
+      if (imageData) addInlineImage(imageData, 55, 42, imageKey)
       const prefix = `${toRoman(subIdx + 1)})  `
       const rawText = question.question || ''
       // Split text at blank markers (___) so we can draw real lines
@@ -483,7 +510,7 @@ export async function generateExamPDF(
     }
 
     // Render Match Columns — horizontal picture layout when colA has images (like sample Q3)
-    const addMatchColumnsItem = (question: any, subIdx: number, colAImages?: Record<number, string>) => {
+    const addMatchColumnsItem = (question: any, subIdx: number, colAImages?: Record<number, string>, colBImages?: Record<number, string>) => {
       const colA: string[] = question.column_a || []
       const colB: string[] = question.column_b || []
       const rows = Math.max(colA.length, colB.length)
@@ -579,16 +606,44 @@ export async function generateExamPDF(
 
       doc.setFont('helvetica', 'normal'); doc.setFontSize(11)
       for (let r = 0; r < rows; r++) {
-        checkPageBreak(9)
         const aRaw  = colA[r] ? stripLeadingNum(String(colA[r])) : ''
         const bRaw  = colB[r] ? stripLeadingNum(String(colB[r])) : ''
         const aItem = aRaw ? `${r + 1}.  ${aRaw}` : ''
         const bItem = bRaw ? `${String.fromCharCode(65 + r)}.  ${bRaw}` : ''
         const aLines = wrap(aItem, colAWidth - 3)
         const bLines = wrap(bItem, colBWidth - 3)
+
+        // Calculate row height including any images
+        const aImgData = colAImages?.[r]
+        const bImgData = colBImages?.[r]
+        const aImgKey = `obj-match_columns-${subIdx}-colA-${r}`
+        const bImgKey = `obj-match_columns-${subIdx}-colB-${r}`
+        const aImg = imageStore[aImgKey]
+        const bImg = imageStore[bImgKey]
+        const aImgH = aImg ? aImg.heightMm : (aImgData ? 20 : 0)
+        const bImgH = bImg ? bImg.heightMm : (bImgData ? 20 : 0)
+        const rowH = Math.max(aLines.length, bLines.length) * 5 + Math.max(aImgH, bImgH) + (aImgData || bImgData ? 4 : 0)
+        checkPageBreak(rowH + 4)
+
         aLines.forEach((line: string, li: number) => doc.text(line, tableLeft, yPos + li * 5))
         bLines.forEach((line: string, li: number) => doc.text(line, colBLeft,  yPos + li * 5))
-        yPos += Math.max(aLines.length, bLines.length) * 5 + 2
+        const textH = Math.max(aLines.length, bLines.length) * 5 + 2
+        let rowImgY = yPos + textH
+
+        if (aImgData) {
+          const imgW = aImg ? aImg.widthMm : 30
+          const imgH = aImg ? aImg.heightMm : 20
+          try { doc.addImage(aImgData, 'JPEG', tableLeft, rowImgY, imgW, imgH) }
+          catch { try { doc.addImage(aImgData, 'PNG', tableLeft, rowImgY, imgW, imgH) } catch {} }
+        }
+        if (bImgData) {
+          const imgW = bImg ? bImg.widthMm : 30
+          const imgH = bImg ? bImg.heightMm : 20
+          try { doc.addImage(bImgData, 'JPEG', colBLeft, rowImgY, imgW, imgH) }
+          catch { try { doc.addImage(bImgData, 'PNG', colBLeft, rowImgY, imgW, imgH) } catch {} }
+        }
+
+        yPos += rowH + 2
       }
       yPos += 3
     }
@@ -661,7 +716,7 @@ export async function generateExamPDF(
     }
 
     // Render short/long answer sub-item — with "Ans:" prefixed answer lines
-    const addAnswerLinesItem = (question: any, subIdx: number, lineCount = 4, imageData?: string) => {
+    const addAnswerLinesItem = (question: any, subIdx: number, lineCount = 4, imageData?: string, imageKey?: string) => {
       checkPageBreak(lineCount * 12 + 15)
       const prefix = `${toRoman(subIdx + 1)})  `
       const qText = question.question || question.statement || ''
@@ -672,7 +727,7 @@ export async function generateExamPDF(
         doc.text(line, ix, yPos + i * 5.5)
       })
       yPos += qLines.length * 5.5 + 4
-      if (imageData) addInlineImage(imageData)
+      if (imageData) addInlineImage(imageData, 55, 42, imageKey)
       // First line has "Ans:" label, rest are plain lines
       for (let l = 0; l < lineCount; l++) {
         checkPageBreak(13)
@@ -733,7 +788,7 @@ export async function generateExamPDF(
     }
 
     // Render picture description sub-item
-    const addPictureDescriptionItem = (question: any, subIdx: number, imageData?: string) => {
+    const addPictureDescriptionItem = (question: any, subIdx: number, imageData?: string, imageKey?: string) => {
       checkPageBreak(60)
       const prefix = `${toRoman(subIdx + 1)})  `
       const desc = question.instruction || 'Look at the picture and describe it.'
@@ -745,10 +800,15 @@ export async function generateExamPDF(
       })
       yPos += dLines.length * 5.5 + 3
 
-      // Image or placeholder box
-      const imgBoxW = 70
-      const imgBoxH = 50
-      const imgX = margin + (contentWidth - imgBoxW) / 2
+      // Image or placeholder box — use per-image dimensions if available
+      const attachment = imageKey ? imageStore[imageKey] : undefined
+      const imgBoxW = attachment?.widthMm ?? 70
+      const imgBoxH = attachment?.heightMm ?? 50
+      const align = attachment?.alignment ?? 'center'
+      let imgX: number
+      if (align === 'left') imgX = margin
+      else if (align === 'right') imgX = pageWidth - margin - imgBoxW
+      else imgX = margin + (contentWidth - imgBoxW) / 2
       doc.setLineWidth(0.5)
       doc.rect(imgX, yPos, imgBoxW, imgBoxH)
 
@@ -756,11 +816,12 @@ export async function generateExamPDF(
         try {
           doc.addImage(imageData, 'JPEG', imgX, yPos, imgBoxW, imgBoxH)
         } catch {
-          // If image fails, show placeholder text
-          doc.setFontSize(8)
-          doc.setTextColor(150, 150, 150)
-          doc.text('[Picture]', imgX + imgBoxW / 2, yPos + imgBoxH / 2, { align: 'center' })
-          doc.setTextColor(0, 0, 0)
+          try { doc.addImage(imageData, 'PNG', imgX, yPos, imgBoxW, imgBoxH) } catch {
+            doc.setFontSize(8)
+            doc.setTextColor(150, 150, 150)
+            doc.text('[Picture]', imgX + imgBoxW / 2, yPos + imgBoxH / 2, { align: 'center' })
+            doc.setTextColor(0, 0, 0)
+          }
         }
       } else {
         doc.setFontSize(8)
@@ -781,7 +842,7 @@ export async function generateExamPDF(
     }
 
     // Render label figures sub-item (instruction text + image box per sub-item)
-    const addLabelFiguresItem = (_question: any, subIdx: number, imageData?: string) => {
+    const addLabelFiguresItem = (_question: any, subIdx: number, imageData?: string, imageKey?: string) => {
       checkPageBreak(60)
       const prefix = `${toRoman(subIdx + 1)})`
       // Only show the sub-item number — no repeated instruction text
@@ -790,10 +851,15 @@ export async function generateExamPDF(
       doc.text(prefix, ix, yPos)
       yPos += 6
 
-      // Image box (centered)
-      const imgBoxW = 70
-      const imgBoxH = 50
-      const imgX = margin + (contentWidth - imgBoxW) / 2
+      // Image box — use per-image dimensions if available
+      const attachment = imageKey ? imageStore[imageKey] : undefined
+      const imgBoxW = attachment?.widthMm ?? 70
+      const imgBoxH = attachment?.heightMm ?? 50
+      const align = attachment?.alignment ?? 'center'
+      let imgX: number
+      if (align === 'left') imgX = margin
+      else if (align === 'right') imgX = pageWidth - margin - imgBoxW
+      else imgX = margin + (contentWidth - imgBoxW) / 2
       doc.setLineWidth(0.5)
       doc.rect(imgX, yPos, imgBoxW, imgBoxH)
 
@@ -801,10 +867,12 @@ export async function generateExamPDF(
         try {
           doc.addImage(imageData, 'JPEG', imgX, yPos, imgBoxW, imgBoxH)
         } catch {
-          doc.setFontSize(8)
-          doc.setTextColor(150, 150, 150)
-          doc.text('[Figure]', imgX + imgBoxW / 2, yPos + imgBoxH / 2, { align: 'center' })
-          doc.setTextColor(0, 0, 0)
+          try { doc.addImage(imageData, 'PNG', imgX, yPos, imgBoxW, imgBoxH) } catch {
+            doc.setFontSize(8)
+            doc.setTextColor(150, 150, 150)
+            doc.text('[Figure]', imgX + imgBoxW / 2, yPos + imgBoxH / 2, { align: 'center' })
+            doc.setTextColor(0, 0, 0)
+          }
         }
       } else {
         doc.setFontSize(8)
@@ -1085,12 +1153,22 @@ export async function generateExamPDF(
           filteredQs.forEach((q, subIdx) => {
             const origIdx = filteredIndices[subIdx]
             const colAImgs: Record<number, string> = {}
+            const colBImgs: Record<number, string> = {}
             const colALen = (q.column_a || []).length
+            const colBLen = (q.column_b || []).length
             for (let r = 0; r < colALen; r++) {
               const key = `obj-match_columns-${origIdx}-colA-${r}`
-              if (questionImages[key]) colAImgs[r] = questionImages[key]
+              if (imageStore[key]) colAImgs[r] = imageStore[key].dataUrl
             }
-            addMatchColumnsItem(q, subIdx, Object.keys(colAImgs).length > 0 ? colAImgs : undefined)
+            for (let r = 0; r < colBLen; r++) {
+              const key = `obj-match_columns-${origIdx}-colB-${r}`
+              if (imageStore[key]) colBImgs[r] = imageStore[key].dataUrl
+            }
+            addMatchColumnsItem(
+              q, subIdx,
+              Object.keys(colAImgs).length > 0 ? colAImgs : undefined,
+              Object.keys(colBImgs).length > 0 ? colBImgs : undefined
+            )
           })
           continue
         }
@@ -1106,12 +1184,15 @@ export async function generateExamPDF(
 
         // circle_correct_answer: use horizontal grid if all items have images (like sample Q2 a.m./p.m.)
         if (typeId === 'circle_correct_answer') {
-          const circleImgs = filteredIndices.map(oi => questionImages[`obj-circle_correct_answer-${oi}`])
+          const circleImgs = filteredIndices.map(oi => imageStore[`obj-circle_correct_answer-${oi}`]?.dataUrl)
           const allHaveImages = filteredQs.length >= 2 && circleImgs.every(Boolean)
           if (allHaveImages) {
             addCircleGroupHorizontal(filteredQs, circleImgs)
           } else {
-            filteredQs.forEach((q, subIdx) => addCircleItem(q, subIdx, circleImgs[subIdx]))
+            filteredQs.forEach((q, subIdx) => {
+              const circleImgId = `obj-circle_correct_answer-${filteredIndices[subIdx]}`
+              addCircleItem(q, subIdx, circleImgs[subIdx], circleImgId)
+            })
           }
           yPos += 4
           continue
@@ -1124,22 +1205,22 @@ export async function generateExamPDF(
           switch (typeId) {
             case 'true_false': {
               const tfImgId = `obj-true_false-${filteredIndices[subIdx]}`
-              addTrueFalseItem(question.statement || question.question || '', subIdx, questionImages[tfImgId])
+              addTrueFalseItem(question.statement || question.question || '', subIdx, imageStore[tfImgId]?.dataUrl, tfImgId)
               break
             }
             case 'fill_in_blanks': {
               const fibImgId = `obj-fill_in_blanks-${filteredIndices[subIdx]}`
-              addFillInBlanksItem(question, subIdx, questionImages[fibImgId])
+              addFillInBlanksItem(question, subIdx, imageStore[fibImgId]?.dataUrl, fibImgId)
               break
             }
             case 'mcq': {
               const mcqImgId = `obj-mcq-${filteredIndices[subIdx]}`
-              addMCQItem(question, subIdx, questionImages[mcqImgId])
+              addMCQItem(question, subIdx, imageStore[mcqImgId]?.dataUrl, mcqImgId)
               break
             }
             case 'circle_correct_answer': {
               const circleImgId = `obj-circle_correct_answer-${filteredIndices[subIdx]}`
-              addCircleItem(question, subIdx, questionImages[circleImgId])
+              addCircleItem(question, subIdx, imageStore[circleImgId]?.dataUrl, circleImgId)
               break
             }
             case 'fill_in_blanks_from_word_bank': {
@@ -1168,7 +1249,7 @@ export async function generateExamPDF(
             }
             case 'label_figures': {
               const imgId = `obj-label_figures-${filteredIndices[subIdx]}`
-              addLabelFiguresItem(question, subIdx, questionImages[imgId])
+              addLabelFiguresItem(question, subIdx, imageStore[imgId]?.dataUrl, imgId)
               break
             }
             case 'short_practice_questions_missing_solution':
@@ -1230,22 +1311,22 @@ export async function generateExamPDF(
               break
             case 'picture_description': {
               const imgId = `subj-picture_description-${filteredIndices[subIdx]}`
-              addPictureDescriptionItem(question, subIdx, questionImages[imgId])
+              addPictureDescriptionItem(question, subIdx, imageStore[imgId]?.dataUrl, imgId)
               break
             }
             case 'label_figures': {
               const imgId = `subj-label_figures-${filteredIndices[subIdx]}`
-              addLabelFiguresItem(question, subIdx, questionImages[imgId])
+              addLabelFiguresItem(question, subIdx, imageStore[imgId]?.dataUrl, imgId)
               break
             }
             case 'short_answer': {
               const saImgId = `subj-short_answer-${filteredIndices[subIdx]}`
-              addAnswerLinesItem(question, subIdx, 4, questionImages[saImgId])
+              addAnswerLinesItem(question, subIdx, 4, imageStore[saImgId]?.dataUrl, saImgId)
               break
             }
             case 'long_answer': {
               const laImgId = `subj-long_answer-${filteredIndices[subIdx]}`
-              addAnswerLinesItem(question, subIdx, 7, questionImages[laImgId])
+              addAnswerLinesItem(question, subIdx, 7, imageStore[laImgId]?.dataUrl, laImgId)
               break
             }
             case 'practice_questions_by_topic':

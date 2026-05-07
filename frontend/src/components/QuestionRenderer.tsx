@@ -174,21 +174,29 @@ export function QuestionRenderer({
                 {String.fromCharCode(65 + idx)}.
               </span>
               {isEditing ? (
-                <input
-                  type="text"
-                  value={option}
-                  onChange={(e) => {
-                    const newOptions = [...editedQuestion.options]
-                    newOptions[idx] = e.target.value
-                    onUpdateField('options', newOptions)
-                  }}
-                  className="flex-1 px-2 py-1 text-sm border border-[var(--border)] rounded"
-                />
+                <>
+                  <input
+                    type="text"
+                    value={option}
+                    onChange={(e) => {
+                      const newOptions = [...editedQuestion.options]
+                      newOptions[idx] = e.target.value
+                      onUpdateField('options', newOptions)
+                    }}
+                    className="flex-1 px-2 py-1 text-sm border border-[var(--border)] rounded"
+                  />
+                  <button type="button" onClick={() => onUpdateField('options', editedQuestion.options.filter((_: any, i: number) => i !== idx))}
+                    className="text-red-400 hover:text-red-600 mt-1 shrink-0"><X size={12} /></button>
+                </>
               ) : (
                 <span className="text-sm text-[var(--text-secondary)]">{option}</span>
               )}
             </div>
           ))}
+          {isEditing && (
+            <button type="button" onClick={() => onUpdateField('options', [...editedQuestion.options, ''])}
+              className="text-xs text-[var(--primary)] hover:underline ml-6">+ Add option</button>
+          )}
           <div className="answer-space"></div>
           <div className="answer-display mt-3 pt-3 border-t border-[var(--border-light)]">
             {isEditing ? (
@@ -280,6 +288,8 @@ export function QuestionRenderer({
   const renderMatchColumns = () => {
     const colA: string[] = isEditing ? (editedQuestion.column_a || []) : (question.column_a || [])
     const colB: string[] = isEditing ? (editedQuestion.column_b || []) : (question.column_b || [])
+    // Strip leading "1." / "A." prefixes the LLM may include
+    const stripNum = (s: string) => s.replace(/^\d+[\.\)]\s*/, '').replace(/^[A-Ea-e][\.\)]\s*/, '')
     return (
       <>
         {isEditing ? (
@@ -300,23 +310,31 @@ export function QuestionRenderer({
             <div className="space-y-1">
               {colA.map((item: string, idx: number) => (
                 <div key={idx} className="flex items-center gap-2">
-                  <span className="text-sm text-[var(--text-secondary)] min-w-[20px]">{idx + 1}.</span>
+                  <span className="text-sm text-[var(--text-secondary)] shrink-0">{idx + 1}.</span>
                   {isEditing ? (
-                    <input
-                      type="text"
-                      value={item}
-                      onChange={(e) => {
-                        const newArr = [...colA]
-                        newArr[idx] = e.target.value
-                        onUpdateField('column_a', newArr)
-                      }}
-                      className="flex-1 px-2 py-0.5 text-sm border border-[var(--border)] rounded"
-                    />
+                    <>
+                      <input
+                        type="text"
+                        value={stripNum(item)}
+                        onChange={(e) => {
+                          const newArr = [...colA]
+                          newArr[idx] = e.target.value
+                          onUpdateField('column_a', newArr)
+                        }}
+                        className="flex-1 px-2 py-0.5 text-sm border border-[var(--border)] rounded"
+                      />
+                      <button type="button" onClick={() => onUpdateField('column_a', colA.filter((_, i) => i !== idx))}
+                        className="text-red-400 hover:text-red-600 shrink-0"><X size={12} /></button>
+                    </>
                   ) : (
-                    <span className="text-sm text-[var(--text-primary)]">{item}</span>
+                    <span className="text-sm text-[var(--text-primary)]">{stripNum(item)}</span>
                   )}
                 </div>
               ))}
+              {isEditing && (
+                <button type="button" onClick={() => onUpdateField('column_a', [...colA, ''])}
+                  className="text-xs text-[var(--primary)] hover:underline mt-1">+ Add row</button>
+              )}
             </div>
           </div>
           <div>
@@ -324,23 +342,31 @@ export function QuestionRenderer({
             <div className="space-y-1">
               {colB.map((item: string, idx: number) => (
                 <div key={idx} className="flex items-center gap-2">
-                  <span className="text-sm text-[var(--text-secondary)] min-w-[20px]">{String.fromCharCode(65 + idx)}.</span>
+                  <span className="text-sm text-[var(--text-secondary)] shrink-0">{String.fromCharCode(65 + idx)}.</span>
                   {isEditing ? (
-                    <input
-                      type="text"
-                      value={item}
-                      onChange={(e) => {
-                        const newArr = [...colB]
-                        newArr[idx] = e.target.value
-                        onUpdateField('column_b', newArr)
-                      }}
-                      className="flex-1 px-2 py-0.5 text-sm border border-[var(--border)] rounded"
-                    />
+                    <>
+                      <input
+                        type="text"
+                        value={stripNum(item)}
+                        onChange={(e) => {
+                          const newArr = [...colB]
+                          newArr[idx] = e.target.value
+                          onUpdateField('column_b', newArr)
+                        }}
+                        className="flex-1 px-2 py-0.5 text-sm border border-[var(--border)] rounded"
+                      />
+                      <button type="button" onClick={() => onUpdateField('column_b', colB.filter((_, i) => i !== idx))}
+                        className="text-red-400 hover:text-red-600 shrink-0"><X size={12} /></button>
+                    </>
                   ) : (
-                    <span className="text-sm text-[var(--text-primary)]">{item}</span>
+                    <span className="text-sm text-[var(--text-primary)]">{stripNum(item)}</span>
                   )}
                 </div>
               ))}
+              {isEditing && (
+                <button type="button" onClick={() => onUpdateField('column_b', [...colB, ''])}
+                  className="text-xs text-[var(--primary)] hover:underline mt-1">+ Add row</button>
+              )}
             </div>
           </div>
         </div>

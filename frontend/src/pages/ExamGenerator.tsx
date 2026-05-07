@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { FileCheck, User, Sparkles, Download, GraduationCap, BookOpen, FileText, ListChecks, History } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
@@ -6,6 +6,13 @@ import { generateExam } from '../services/exam'
 import { OBJECTIVE_TYPES, SUBJECTIVE_TYPES, MATH_OBJECTIVE_TYPES, MATH_SUBJECTIVE_TYPES, getQuestionTypes, type ExamResponse } from '../types'
 import { QuestionRenderer } from '../components/QuestionRenderer'
 import { generateExamPDF } from '../utils/pdfGenerator'
+import { PDFPreview } from '../components/PDFPreview'
+import { ExamDocEditor, type ExamDocEditorHandle } from '../components/ExamDocEditor'
+import type { ImageStore, ImageAttachment } from '../utils/imageStore'
+import { DEFAULT_IMAGE } from '../utils/imageStore'
+
+// When false → show TipTap doc editor. When true → show PDF preview (current behavior).
+const PDF_UI = false
 
 // Human-readable type labels for the exam view
 const TYPE_LABELS: Record<string, string> = {
@@ -53,8 +60,9 @@ export default function ExamGenerator() {
   const [editingQuestion, setEditingQuestion] = useState<string | null>(null)
   const [editedQuestions, setEditedQuestions] = useState<Record<string, any>>({})
   const [downloading, setDownloading] = useState(false)
-  const [questionImages, setQuestionImages] = useState<Record<string, string>>({})
+  const [imageStore, setImageStore] = useState<ImageStore>({})
   const [totalMarksOverride, setTotalMarksOverride] = useState<string>('')
+  const docEditorRef = useRef<ExamDocEditorHandle>(null)
   const [timeAllowed, setTimeAllowed] = useState<string>('')
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -198,13 +206,26 @@ export default function ExamGenerator() {
     }
   }
 
-  const handleImageUpload = (questionId: string, file: File) => {
+  const handleImageUpload = (key: string, file: File) => {
     const reader = new FileReader()
-    reader.onload = (e) => {
+    reader.onload = e => {
       const dataUrl = e.target?.result as string
-      setQuestionImages(prev => ({ ...prev, [questionId]: dataUrl }))
+      setImageStore(prev => ({
+        ...prev,
+        [key]: { ...DEFAULT_IMAGE, ...prev[key], dataUrl },
+      }))
+      // Replace the placeholder for this question in doc editor
+      if (!PDF_UI) docEditorRef.current?.replaceImagePlaceholder(key, dataUrl)
     }
     reader.readAsDataURL(file)
+  }
+
+  const handleImageUpdate = (key: string, patch: Partial<ImageAttachment>) => {
+    setImageStore(prev => ({ ...prev, [key]: { ...prev[key], ...patch } }))
+  }
+
+  const handleImageRemove = (key: string) => {
+    setImageStore(prev => { const next = { ...prev }; delete next[key]; return next })
   }
 
   const downloadExam = async () => {
@@ -220,7 +241,7 @@ export default function ExamGenerator() {
       }
       const filename = `${formData.subject}_Grade${formData.grade}_Exam_${new Date().toISOString().split('T')[0]}.pdf`
       const totalMarksVal = totalMarksOverride !== '' && !isNaN(parseInt(totalMarksOverride)) ? parseInt(totalMarksOverride) : undefined
-      await generateExamPDF(examData, selectedQuestions, { filename, includeAnswerKey: true, schoolName, totalMarksOverride: totalMarksVal, timeAllowed: timeAllowed.trim() || undefined }, questionImages)
+      await generateExamPDF(examData, selectedQuestions, { filename, includeAnswerKey: true, schoolName, totalMarksOverride: totalMarksVal, timeAllowed: timeAllowed.trim() || undefined }, imageStore)
     } catch (error) {
       setError('Failed to download PDF. Please try again.')
     } finally {
@@ -399,8 +420,8 @@ export default function ExamGenerator() {
         onSaveEditing={() => saveEditedQuestion(questionId)}
         onCancelEditing={cancelEditingQuestion}
         onUpdateField={(field, value) => updateEditedQuestion(questionId, field, value)}
-        questionImage={questionImages[questionId]}
-        onImageUpload={['picture_description', 'label_figures', 'practice_questions_by_topic', 'real_life_story_problems'].includes(typeId) ? (file) => handleImageUpload(questionId, file) : undefined}
+        questionImage={imageStore[questionId]?.dataUrl}
+        onImageUpload={(file) => handleImageUpload(questionId, file)}
         onDelete={() => deleteQuestion(questionId)}
       />
     )
@@ -507,7 +528,7 @@ export default function ExamGenerator() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--background)] flex flex-col">
+    <div className="h-screen bg-[var(--background)] flex flex-col overflow-hidden">
       {/* Header */}
       <header className="no-print bg-[var(--primary)] text-white h-18 px-12 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -536,9 +557,9 @@ export default function ExamGenerator() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 p-12 flex gap-8">
+      <main className="flex-1 p-8 flex gap-6 overflow-hidden min-h-0">
         {/* Form Panel */}
-        <div className="no-print w-[420px] bg-[var(--surface)] rounded-2xl shadow-lg p-8 space-y-6 h-fit">
+        <div className="no-print w-[380px] shrink-0 bg-[var(--surface)] rounded-2xl shadow-lg p-8 space-y-6 overflow-y-auto">
           <div>
             <h2 className="text-2xl font-semibold text-[var(--text-primary)] mb-2">
               Generate Your Exam
@@ -734,24 +755,20 @@ export default function ExamGenerator() {
           </form>
         </div>
 
-        {/* Output Panel */}
-        <div className="flex-1 bg-[var(--surface)] rounded-2xl shadow-lg p-8 space-y-6">
-          <div className="no-print flex items-center justify-between">
+        {/* Questions Panel */}
+        <div className="flex-1 bg-[var(--surface)] rounded-2xl shadow-lg flex flex-col overflow-hidden">
+          <div className="px-8 pt-6 pb-3 shrink-0">
             <h2 className="text-2xl font-semibold text-[var(--text-primary)]">Generated Exam</h2>
+            <div className="mt-3 h-px bg-[var(--border-light)]" />
           </div>
 
-          <div className="no-print h-px bg-[var(--border-light)]" />
-
           {loading && (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="flex-1 flex flex-col items-center justify-center py-20 text-center px-8">
               <Sparkles size={64} className="text-[var(--primary)] mb-6 animate-pulse" />
               <p className="text-lg font-semibold text-[var(--text-primary)] mb-4">{loadingMessage}</p>
               <div className="w-full max-w-md">
                 <div className="h-2 bg-[var(--background-light)] rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-[var(--primary)] transition-all duration-500 ease-out"
-                    style={{ width: `${progress}%` }}
-                  />
+                  <div className="h-full bg-[var(--primary)] transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
                 </div>
                 <p className="text-sm text-[var(--text-muted)] mt-2">{Math.round(progress)}%</p>
               </div>
@@ -759,182 +776,115 @@ export default function ExamGenerator() {
           )}
 
           {!examResult && !loading && (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="flex-1 flex flex-col items-center justify-center py-20 text-center px-8">
               <FileCheck size={64} className="text-[var(--text-muted)] mb-4" />
-              <p className="text-lg text-[var(--text-secondary)]">
-                Configure the parameters and click "Generate Exam" to start
-              </p>
+              <p className="text-lg text-[var(--text-secondary)]">Configure the parameters and click "Generate Exam" to start</p>
             </div>
           )}
 
           {examResult?.error && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-600">
+            <div className="mx-8 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600">
               <p className="font-medium mb-1">Error generating exam</p>
               <p className="text-sm">{examResult.error}</p>
             </div>
           )}
 
           {examResult?.exam && (
-            <div className="space-y-6">
-              {/* Screen-only Metadata Display */}
-              <div className="screen-only flex gap-6 text-sm mb-6">
-                <div className="flex items-center gap-2">
-                  <GraduationCap size={16} className="text-[var(--text-muted)]" />
+            <>
+              {/* Metadata row */}
+              <div className="px-8 pb-2 shrink-0 flex gap-5 text-sm">
+                <div className="flex items-center gap-1.5">
+                  <GraduationCap size={14} className="text-[var(--text-muted)]" />
                   <span className="text-[var(--text-muted)]">Grade:</span>
-                  <span className="font-medium text-[var(--text-primary)]">{formData.grade}</span>
+                  <span className="font-medium">{formData.grade}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <BookOpen size={16} className="text-[var(--text-muted)]" />
+                <div className="flex items-center gap-1.5">
+                  <BookOpen size={14} className="text-[var(--text-muted)]" />
                   <span className="text-[var(--text-muted)]">Subject:</span>
-                  <span className="font-medium text-[var(--text-primary)]">{formData.subject}</span>
+                  <span className="font-medium">{formData.subject}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <FileText size={16} className="text-[var(--text-muted)]" />
+                <div className="flex items-center gap-1.5">
+                  <FileText size={14} className="text-[var(--text-muted)]" />
                   <span className="text-[var(--text-muted)]">Pages:</span>
-                  <span className="font-medium text-[var(--text-primary)]">{formData.coursePageRange || 'N/A'}</span>
+                  <span className="font-medium">{formData.coursePageRange || 'N/A'}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <ListChecks size={16} className="text-[var(--text-muted)]" />
+                <div className="flex items-center gap-1.5">
+                  <ListChecks size={14} className="text-[var(--text-muted)]" />
                   <span className="text-[var(--text-muted)]">Types:</span>
-                  <span className="font-medium text-[var(--text-primary)]">
-                    {Object.keys(examResult.exam.objective || {}).length + Object.keys(examResult.exam.subjective || {}).length}
-                  </span>
+                  <span className="font-medium">{Object.keys(examResult.exam.objective || {}).length + Object.keys(examResult.exam.subjective || {}).length}</span>
                 </div>
               </div>
 
-              {/* SCREEN VIEW - Show all questions */}
-              <div className="screen-only">
+              {/* Scrollable questions */}
+              <div className="flex-1 overflow-y-auto px-8 pb-4">
                 {renderQuestionsSection(false)}
               </div>
 
-              {/* PRINT VIEW - Show only selected questions */}
-              <div className="exam-print-area print-only hidden">
-                {/* PROFESSIONAL EXAM HEADER */}
-                <div className="exam-header">
-                  {/* School Title */}
-                  <div className="school-name">Army Public School (APS)</div>
-                  <div className="exam-title">Examination Paper</div>
-
-                  {/* Subject and Total Marks Row */}
-                  <div className="exam-info-row">
-                    <div className="exam-info-field">
-                      <span>Subject:</span>
-                      <span>{formData.subject}</span>
-                    </div>
-                    <div className="exam-info-field">
-                      <span>Total Marks:</span>
-                      <span>{getTotalMarks()}</span>
-                    </div>
-                  </div>
-
-                  {/* Student Info Grid */}
-                  <div className="student-info-grid">
-                    <div className="info-item">
-                      <span>Class:</span>
-                      <span>{formData.grade}</span>
-                    </div>
-                    <div className="info-item">
-                      <span>Date:</span>
-                      <span>&nbsp;</span>
-                    </div>
-                    <div className="info-item" style={{ gridColumn: '1 / -1' }}>
-                      <span>Name:</span>
-                      <span>&nbsp;</span>
-                    </div>
-                    <div className="info-item">
-                      <span>Roll No:</span>
-                      <span>&nbsp;</span>
-                    </div>
-                    <div className="info-item">
-                      <span>Section:</span>
-                      <span>&nbsp;</span>
-                    </div>
-                  </div>
-
-                  {/* Instructions */}
-                  <div className="exam-instructions">
-                    Note: Read questions carefully, don't overwrite and check your work.
-                  </div>
-                </div>
-
-                {/* EXAM PAPER SECTION */}
-                <div className="exam-paper-section">
-                  {renderQuestionsSection(true)}
-                </div>
-
-                {/* ANSWER KEY SECTION - Starts on new page */}
-                <div className="answer-key-section">
-                  <div className="answer-key-header">ANSWER KEY / RUBRIC</div>
-                  <div className="answer-key-meta">
-                    <span className="font-bold mr-2">Subject:</span> {formData.subject}
-                    <span className="font-bold mx-3">|</span>
-                    <span className="font-bold mr-2">Grade:</span> {formData.grade}
-                    <span className="font-bold mx-3">|</span>
-                    <span className="font-bold mr-2">Date Generated:</span> {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                  </div>
-                  {renderQuestionsSection(true)}
-                </div>
-              </div>
               {/* Selection Toolbar */}
-              <div className="no-print sticky bottom-0 bg-[var(--surface)] border-t border-[var(--border)] pt-4 flex items-center justify-between">
+              <div className="shrink-0 bg-[var(--surface)] border-t border-[var(--border)] px-8 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3 text-sm text-[var(--text-secondary)]">
                   <span>
                     <span className="font-semibold text-[var(--text-primary)]">{selectedQuestions.size}</span> of{' '}
                     <span className="font-semibold text-[var(--text-primary)]">
-                      {Object.values(examResult.exam.objective || {}).reduce((sum, questions) =>
-                        sum + (Array.isArray(questions) ? questions.length : 0), 0) +
-                       Object.values(examResult.exam.subjective || {}).reduce((sum, questions) =>
-                        sum + (Array.isArray(questions) ? questions.length : 0), 0)}
-                    </span>{' '}
-                    questions selected
+                      {Object.values(examResult.exam.objective || {}).reduce((sum, qs) => sum + (Array.isArray(qs) ? qs.length : 0), 0) +
+                       Object.values(examResult.exam.subjective || {}).reduce((sum, qs) => sum + (Array.isArray(qs) ? qs.length : 0), 0)}
+                    </span>{' '}selected
                   </span>
                   <span className="text-[var(--border)]">|</span>
-                  <div className="flex items-center gap-2">
-                    <span>Total Marks:</span>
+                  <div className="flex items-center gap-1.5">
+                    <span>Marks:</span>
                     <input
-                      type="number"
-                      min="1"
+                      type="number" min="1"
                       value={totalMarksOverride !== '' ? totalMarksOverride : getCalculatedMarks()}
-                      onChange={(e) => setTotalMarksOverride(e.target.value)}
-                      onBlur={(e) => { if (e.target.value === '' || e.target.value === String(getCalculatedMarks())) setTotalMarksOverride('') }}
-                      className="w-16 px-2 py-0.5 text-sm font-semibold text-[var(--text-primary)] border border-[var(--border)] rounded focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
-                      title="Edit total marks for PDF"
+                      onChange={e => setTotalMarksOverride(e.target.value)}
+                      onBlur={e => { if (e.target.value === '' || e.target.value === String(getCalculatedMarks())) setTotalMarksOverride('') }}
+                      className="w-16 px-2 py-0.5 text-sm font-semibold border border-[var(--border)] rounded focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
                     />
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    onClick={selectAllQuestions}
-                    className="px-4 py-2 bg-[var(--background-light)] hover:bg-[var(--border-light)] rounded-lg text-sm font-medium transition-colors"
-                  >
-                    Select All
-                  </button>
-                  <button
-                    onClick={unselectAllQuestions}
-                    className="px-4 py-2 bg-[var(--background-light)] hover:bg-[var(--border-light)] rounded-lg text-sm font-medium transition-colors"
-                  >
-                    Unselect All
-                  </button>
+                  <button onClick={selectAllQuestions} className="px-3 py-1.5 bg-[var(--background-light)] hover:bg-[var(--border-light)] rounded-lg text-sm font-medium transition-colors">Select All</button>
+                  <button onClick={unselectAllQuestions} className="px-3 py-1.5 bg-[var(--background-light)] hover:bg-[var(--border-light)] rounded-lg text-sm font-medium transition-colors">Unselect All</button>
                   <button
                     onClick={downloadExam}
                     disabled={selectedQuestions.size === 0 || downloading}
-                    className="px-4 py-2 bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    className="px-4 py-1.5 bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
-                    {downloading ? (
-                      <>
-                        <Sparkles size={16} className="animate-spin" />
-                        Generating PDF...
-                      </>
-                    ) : (
-                      <>
-                        <Download size={16} />
-                        Download PDF
-                      </>
-                    )}
+                    {downloading ? <><Sparkles size={15} className="animate-spin" />Generating PDF...</> : <><Download size={15} />Download PDF</>}
                   </button>
                 </div>
               </div>
-            </div>
+            </>
+          )}
+        </div>
+
+        {/* Right panel: Doc Editor or PDF Preview */}
+        <div className="w-[520px] shrink-0 rounded-2xl shadow-lg overflow-hidden">
+          {PDF_UI ? (
+            <PDFPreview
+              exam={examResult?.exam ? { exam_content: examResult.exam } : null}
+              selectedQuestions={selectedQuestions}
+              schoolName={schoolName}
+              totalMarks={getTotalMarks()}
+              timeAllowed={timeAllowed}
+              grade={formData.grade}
+              subject={formData.subject}
+              images={imageStore}
+              onUpload={handleImageUpload}
+              onUpdate={handleImageUpdate}
+              onRemove={handleImageRemove}
+            />
+          ) : (
+            <ExamDocEditor
+              ref={docEditorRef}
+              exam={examResult?.exam ? { exam_content: examResult.exam, subject: formData.subject, grade: formData.grade } : null}
+              selectedQuestions={selectedQuestions}
+              schoolName={schoolName}
+              totalMarks={getTotalMarks()}
+              timeAllowed={timeAllowed}
+              grade={formData.grade}
+              subject={formData.subject}
+            />
           )}
         </div>
       </main>
