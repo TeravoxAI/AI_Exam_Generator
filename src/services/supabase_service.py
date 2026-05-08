@@ -41,8 +41,11 @@ class SupabaseService:
         """Fetch textbook content from database"""
         logger.info(f"📖 Fetching content: {grade_level}/{subject}/{book_type}")
 
+        # Convert grade number to "Grade X" format for database query
+        grade_query = f"Grade {grade_level}" if grade_level.isdigit() else grade_level
+
         response = self.client.table("textbooks").select("*").eq(
-            "grade_level", grade_level
+            "grade_level", grade_query
         ).eq(
             "subject", subject
         ).eq(
