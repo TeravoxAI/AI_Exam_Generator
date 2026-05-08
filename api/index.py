@@ -3,6 +3,12 @@ Vercel API entry point for Teravox
 This file is loaded by Vercel serverless functions
 """
 
+import sys
+import os
+
+# Add repo root to path so src/ imports work
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from dotenv import load_dotenv
 load_dotenv()
 
